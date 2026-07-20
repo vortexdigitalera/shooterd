@@ -4,10 +4,11 @@ import android.os.Build;
 import android.util.Log;
 
 import java.lang.reflect.Method;
-import java.util.concurrent.ThreadLocalRandom;
+import java.security.SecureRandom;
 
 final class BootKey {
 
+    private static final SecureRandom RANDOM = new SecureRandom();
     private static volatile byte[] cachedBootKey;
     private static volatile byte[] cachedBootHash;
 
@@ -65,28 +66,79 @@ final class BootKey {
 
     private static byte[] randomBytes(int len) {
         byte[] b = new byte[len];
-        ThreadLocalRandom.current().nextBytes(b);
+        RANDOM.nextBytes(b);
         return b;
     }
 
     static int getOsVersion() {
-        switch (Build.VERSION.SDK_INT) {
-            case 36: return 160000;
-            case 35: return 150000;
-            case 34: return 140000;
-            case 33: return 130000;
-            case 32: return 120100;
-            case 31: return 120000;
-            default: return Build.VERSION.SDK_INT * 10000;
-        }
+        return getOsVersion(Build.VERSION.SDK_INT);
+    }
+
+    static int getOsVersion(int sdk) {
+        return switch (sdk) {
+            case 26 -> 80000;
+            case 27 -> 81000;
+            case 28 -> 90000;
+            case 29 -> 100000;
+            case 30 -> 110000;
+            case 31, 32 -> 120000;
+            case 33 -> 130000;
+            case 34 -> 140000;
+            case 35 -> 150000;
+            case 36 -> 160000;
+            case 37 -> 170000;
+            default -> sdk > 37 ? (sdk - 20) * 10000 : 80000;
+        };
+    }
+
+    static int getAttestationVersion() {
+        return getAttestationVersion(Build.VERSION.SDK_INT);
+    }
+
+    static int getAttestationVersion(int sdk) {
+        if (sdk <= 27) return 2;
+        if (sdk == 28) return 3;
+        if (sdk <= 30) return 4;
+        if (sdk <= 32) return 100;
+        if (sdk == 33) return 200;
+        if (sdk <= 35) return 300;
+        if (sdk == 36) return 400;
+        return 500;
+    }
+
+    static int getKeymasterVersion() {
+        return getKeymasterVersion(Build.VERSION.SDK_INT);
+    }
+
+    static int getKeymasterVersion(int sdk) {
+        if (sdk <= 27) return 3;
+        if (sdk == 28) return 4;
+        if (sdk <= 30) return 41;
+        return getAttestationVersion(sdk);
     }
 
     static int getPatchLevel() {
         return convertPatchLevel(Build.VERSION.SECURITY_PATCH, false);
     }
 
-    static long getPatchLevelLong() {
-        return convertPatchLevel(Build.VERSION.SECURITY_PATCH, true);
+    static Long getVendorPatchLevel() {
+        return patchLevelFromProp("ro.vendor.build.security_patch");
+    }
+
+    static Long getBootPatchLevel() {
+        return patchLevelFromProp("ro.bootimage.build.security_patch");
+    }
+
+    private static Long patchLevelFromProp(String property) {
+        try {
+            Class<?> sp = Class.forName("android.os.SystemProperties");
+            Method get = sp.getDeclaredMethod("get", String.class, String.class);
+            String patch = (String) get.invoke(null, property, "");
+            if (patch == null || patch.isEmpty()) return null;
+            return (long) convertPatchLevel(patch, true);
+        } catch (Throwable t) {
+            return null;
+        }
     }
 
     private static int convertPatchLevel(String patch, boolean longForm) {

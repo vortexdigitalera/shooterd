@@ -2,7 +2,7 @@
 agp = "9.0.1"
 xposed-api = "101.0.0"
 xposed-service = "101.0.0"
-bouncycastle = "1.78.1"
+bouncycastle = "1.85"
 material = "1.13.0"
 appcompat = "1.7.0"
 

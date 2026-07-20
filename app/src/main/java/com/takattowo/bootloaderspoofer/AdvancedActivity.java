@@ -3,7 +3,6 @@ package com.takattowo.bootloaderspoofer;
 import android.content.Intent;
 import android.net.Uri;
 import android.os.Bundle;
-import android.os.ParcelFileDescriptor;
 import android.view.View;
 import android.widget.ImageButton;
 import android.widget.ImageView;
@@ -15,13 +14,9 @@ import androidx.appcompat.app.AppCompatActivity;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 
 import java.io.ByteArrayOutputStream;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
-import java.util.Arrays;
-import java.util.HashSet;
 
 import io.github.libxposed.service.XposedService;
 
@@ -115,7 +110,7 @@ public class AdvancedActivity extends AppCompatActivity implements App.ServiceSt
                 .setPositiveButton(R.string.confirm_clear_ok, (d, w) -> {
                     try {
                         service.deleteRemoteFile(Config.KEYBOX_FILE);
-                        toast(getString(R.string.toast_cleared));
+                        toast(getString(R.string.toast_restart_required));
                     } catch (Throwable t) {
                         toast("Delete failed: " + t.getMessage());
                     }
@@ -148,15 +143,21 @@ public class AdvancedActivity extends AppCompatActivity implements App.ServiceSt
                 if (in == null) throw new IOException("openInputStream returned null");
                 ByteArrayOutputStream baos = new ByteArrayOutputStream();
                 byte[] buf = new byte[8192];
+                int total = 0;
                 int n;
-                while ((n = in.read(buf)) > 0) baos.write(buf, 0, n);
-                String xml = baos.toString("UTF-8");
-                if (writeRemoteString(Config.KEYBOX_FILE, xml)) {
-                    toast(getString(R.string.toast_saved));
-                    updateEditRow();
+                while ((n = in.read(buf)) != -1) {
+                    total += n;
+                    if (total > KeyboxLoader.MAX_XML_BYTES) throw new IOException("Keybox exceeds 1 MiB");
+                    baos.write(buf, 0, n);
                 }
+                String xml = new String(baos.toByteArray(), StandardCharsets.UTF_8);
+                KeyboxLoader.validateUserXml(xml);
+                ServiceFiles.replaceString(service, Config.KEYBOX_FILE, xml,
+                        KeyboxLoader.MAX_XML_BYTES);
+                toast(getString(R.string.toast_restart_required));
+                updateEditRow();
             } catch (Throwable t) {
-                toast("Read failed: " + t.getMessage());
+                toast("Import failed: " + t.getMessage());
             }
         }
     }
@@ -165,31 +166,9 @@ public class AdvancedActivity extends AppCompatActivity implements App.ServiceSt
         XposedService svc = service;
         if (svc == null) return false;
         try {
-            String[] list = svc.listRemoteFiles();
-            return list != null && new HashSet<>(Arrays.asList(list)).contains(name);
+            return ServiceFiles.exists(svc, name);
         } catch (Throwable t) {
             return false;
-        }
-    }
-
-    private boolean writeRemoteString(String name, String content) {
-        XposedService svc = service;
-        if (svc == null) { toast(getString(R.string.toast_not_connected)); return false; }
-        try { svc.deleteRemoteFile(name); } catch (Throwable ignored) {}
-        ParcelFileDescriptor pfd = null;
-        try {
-            pfd = svc.openRemoteFile(name);
-            if (pfd == null) throw new IOException("openRemoteFile returned null");
-            try (FileOutputStream out = new FileOutputStream(pfd.getFileDescriptor())) {
-                out.write(content.getBytes(StandardCharsets.UTF_8));
-                out.getFD().sync();
-            }
-            return true;
-        } catch (Throwable t) {
-            toast("Write failed: " + t.getMessage());
-            return false;
-        } finally {
-            if (pfd != null) try { pfd.close(); } catch (Throwable ignored) {}
         }
     }
 

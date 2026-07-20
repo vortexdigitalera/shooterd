@@ -2,9 +2,8 @@ package com.takattowo.bootloaderspoofer;
 
 import android.os.ParcelFileDescriptor;
 
-import java.io.BufferedReader;
+import java.io.ByteArrayOutputStream;
 import java.io.FileInputStream;
-import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 
 import io.github.libxposed.api.XposedInterface;
@@ -21,14 +20,16 @@ final class RemoteFiles {
             pfd = xposed.openRemoteFile(name);
             if (pfd == null) return null;
             try (FileInputStream in = new FileInputStream(pfd.getFileDescriptor());
-                 BufferedReader r = new BufferedReader(new InputStreamReader(in, StandardCharsets.UTF_8))) {
-                StringBuilder sb = new StringBuilder();
-                String line;
-                while ((line = r.readLine()) != null) {
-                    if (sb.length() > 0) sb.append('\n');
-                    sb.append(line);
+                 ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+                byte[] buffer = new byte[8192];
+                int total = 0;
+                int count;
+                while ((count = in.read(buffer)) != -1) {
+                    total += count;
+                    if (total > KeyboxLoader.MAX_XML_BYTES) return null;
+                    out.write(buffer, 0, count);
                 }
-                return sb.toString();
+                return new String(out.toByteArray(), StandardCharsets.UTF_8);
             }
         } catch (Throwable t) {
             return null;

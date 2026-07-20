@@ -28,6 +28,14 @@ final class KeymintConst {
         static final int SHA_2_512 = 6;
     }
 
+    static final class Padding {
+        static final int NONE = 1;
+        static final int RSA_OAEP = 2;
+        static final int RSA_PSS = 3;
+        static final int RSA_PKCS1_1_5_ENCRYPT = 4;
+        static final int RSA_PKCS1_1_5_SIGN = 5;
+    }
+
     static final class EcCurve {
         static final int P_224 = 0;
         static final int P_256 = 1;

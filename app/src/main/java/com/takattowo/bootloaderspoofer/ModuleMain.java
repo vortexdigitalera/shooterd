@@ -1,12 +1,15 @@
 package com.takattowo.bootloaderspoofer;
 
 import android.content.pm.PackageManager;
+import android.os.Build;
 import android.security.keystore.KeyGenParameterSpec;
+import android.security.keystore.KeyProperties;
 import android.util.Log;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
+import java.security.Key;
 import java.security.KeyPairGenerator;
 import java.security.KeyStore;
 import java.security.KeyStoreSpi;
@@ -116,8 +119,9 @@ public class ModuleMain extends XposedModule {
             Method m1 = findConcreteMethod(delegateClass, "initialize", AlgorithmParameterSpec.class);
             if (m1 != null) {
                 hook(m1).intercept(chain -> {
+                    Object result = chain.proceed();
                     captureSpec(chain.getThisObject(), chain.getArg(0));
-                    return chain.proceed();
+                    return result;
                 });
                 log(Log.INFO, TAG, "hooked " + m1.getDeclaringClass().getName() + ".initialize(spec)");
             }
@@ -125,8 +129,9 @@ public class ModuleMain extends XposedModule {
                     AlgorithmParameterSpec.class, SecureRandom.class);
             if (m2 != null) {
                 hook(m2).intercept(chain -> {
+                    Object result = chain.proceed();
                     captureSpec(chain.getThisObject(), chain.getArg(0));
-                    return chain.proceed();
+                    return result;
                 });
                 log(Log.INFO, TAG, "hooked " + m2.getDeclaringClass().getName() + ".initialize(spec,rand)");
             }
@@ -136,10 +141,35 @@ public class ModuleMain extends XposedModule {
     }
 
     private void captureSpec(Object gen, Object specObj) {
-        if (!(specObj instanceof KeyGenParameterSpec spec) || gen == null) return;
+        if (gen == null) return;
+        specByGenerator.remove(gen);
+        if (!(specObj instanceof KeyGenParameterSpec spec)) return;
         try {
             if (!(gen instanceof KeyPairGenerator kpg)) return;
             if (!"AndroidKeyStore".equals(kpg.getProvider().getName())) return;
+            String alias = spec.getKeystoreAlias();
+            if (alias != null) chainByAlias.remove(alias);
+            if (spec.isUserAuthenticationRequired()
+                    || spec.isUserAuthenticationValidWhileOnBody()
+                    || spec.getKeyValidityStart() != null
+                    || spec.getKeyValidityForOriginationEnd() != null
+                    || spec.getKeyValidityForConsumptionEnd() != null) return;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P
+                    && (spec.isStrongBoxBacked()
+                    || spec.isUserPresenceRequired()
+                    || spec.isUserConfirmationRequired()
+                    || spec.isUnlockedDeviceRequired())) return;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+                    && (((spec.getPurposes() & KeyProperties.PURPOSE_ATTEST_KEY) != 0)
+                    || spec.isDevicePropertiesAttestationIncluded()
+                    || spec.getMaxUsageCount() != KeyProperties.UNRESTRICTED_USAGE_COUNT)) return;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM
+                    && spec.isMgf1DigestsSpecified()) return;
+            byte[] challenge = spec.getAttestationChallenge();
+            boolean uniqueIdIncluded = (boolean) KeyGenParameterSpec.class
+                    .getMethod("isUniqueIdIncluded").invoke(spec);
+            if (challenge == null || challenge.length > 128 || uniqueIdIncluded) return;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && spec.getAttestKeyAlias() != null) return;
             String reqAlgo = kpg.getAlgorithm();
             KeyGenParameters params = KeyGenParameters.from(spec, reqAlgo);
             specByGenerator.put(gen, params);
@@ -167,9 +197,10 @@ public class ModuleMain extends XposedModule {
                 }
 
                 if (Config.MODE_CERT_GENERATE.equals(mode)) {
+                    if (params.alias != null) chainByAlias.remove(params.alias);
                     CertHack.Result r = CertHack.generateLeaf(params, registry);
                     if (r != null) {
-                        if (params.alias != null) chainByAlias.put(params.alias, r.chain);
+                        if (params.alias != null) chainByAlias.put(params.alias, r.chain.clone());
                         log(Log.INFO, TAG, "cert_generate: synthesized chain for alias=" + params.alias
                                 + " algo=" + params.algorithm);
                         return r.keyPair;
@@ -225,7 +256,7 @@ public class ModuleMain extends XposedModule {
 
                 Certificate[] cached = alias != null ? chainByAlias.get(alias) : null;
                 if (cached != null) {
-                    return cached;
+                    return cached.clone();
                 }
 
                 Certificate[] caList;
@@ -244,8 +275,37 @@ public class ModuleMain extends XposedModule {
             });
             log(Log.INFO, TAG, "hooked " + keyStoreSpi.getClass().getName()
                     + ".engineGetCertificateChain");
+
+            Method delete = findDeclaredMethod(keyStoreSpi.getClass(), "engineDeleteEntry", String.class);
+            if (delete != null) {
+                hook(delete).intercept(chain -> {
+                    Object result = chain.proceed();
+                    String alias = (String) chain.getArg(0);
+                    if (alias != null) chainByAlias.remove(alias);
+                    return result;
+                });
+            }
+            hookAliasMutation(keyStoreSpi, "engineSetKeyEntry",
+                    String.class, Key.class, char[].class, Certificate[].class);
+            hookAliasMutation(keyStoreSpi, "engineSetKeyEntry",
+                    String.class, byte[].class, Certificate[].class);
+            hookAliasMutation(keyStoreSpi, "engineSetCertificateEntry",
+                    String.class, Certificate.class);
+            hookAliasMutation(keyStoreSpi, "engineSetEntry",
+                    String.class, KeyStore.Entry.class, KeyStore.ProtectionParameter.class);
         } catch (Throwable t) {
             log(Log.ERROR, TAG, "engineGetCertificateChain hook failed", t);
         }
+    }
+
+    private void hookAliasMutation(KeyStoreSpi keyStoreSpi, String name, Class<?>... parameters) {
+        Method method = findConcreteMethod(keyStoreSpi.getClass(), name, parameters);
+        if (method == null) return;
+        hook(method).intercept(chain -> {
+            Object result = chain.proceed();
+            String alias = (String) chain.getArg(0);
+            if (alias != null) chainByAlias.remove(alias);
+            return result;
+        });
     }
 }

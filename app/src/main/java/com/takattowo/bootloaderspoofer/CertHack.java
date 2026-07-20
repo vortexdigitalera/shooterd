@@ -39,6 +39,7 @@ import java.lang.reflect.Method;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
 import java.security.MessageDigest;
+import java.security.PrivateKey;
 import java.security.cert.Certificate;
 import java.security.cert.CertificateFactory;
 import java.security.cert.X509Certificate;
@@ -94,16 +95,29 @@ final class CertHack {
             ASN1Encodable[] encodables = sequence.toArray();
             ASN1Sequence teeEnforced = (ASN1Sequence) encodables[7];
             ASN1EncodableVector vector = new ASN1EncodableVector();
-            ASN1Encodable rootOfTrust = null;
+            int attestationVersion = ASN1Integer.getInstance(encodables[0]).intValueExact();
+            boolean replacedRootOfTrust = false;
 
             for (ASN1Encodable asn1Encodable : teeEnforced) {
                 ASN1TaggedObject taggedObject = (ASN1TaggedObject) asn1Encodable;
                 if (taggedObject.getTagNo() == 704) {
-                    rootOfTrust = taggedObject.getBaseObject().toASN1Primitive();
+                    byte[] verifiedBootHash = BootKey.getBootHash();
+                    try {
+                        ASN1Sequence original = ASN1Sequence.getInstance(taggedObject.getBaseObject());
+                        if (original.size() >= 4) {
+                            verifiedBootHash = ASN1OctetString.getInstance(original.getObjectAt(3)).getOctets();
+                        }
+                    } catch (Throwable t) {
+                        Log.w(ModuleMain.TAG, "failed to extract original boot hash", t);
+                    }
+                    vector.add(new DERTaggedObject(true, 704,
+                            createRootOfTrust(attestationVersion, verifiedBootHash)));
+                    replacedRootOfTrust = true;
                     continue;
                 }
                 vector.add(taggedObject);
             }
+            if (!replacedRootOfTrust) return caList;
 
             String pubAlgo = leaf.getPublicKey().getAlgorithm();
             KeyboxRegistry.Entry k = registry.get(pubAlgo);
@@ -121,43 +135,19 @@ final class CertHack {
                     leafHolder.getSubject(),
                     leafHolder.getSubjectPublicKeyInfo()
             );
-            ContentSigner signer = new JcaContentSignerBuilder(leaf.getSigAlgName())
+            ContentSigner signer = new JcaContentSignerBuilder(signatureAlgorithm(k.keyPair.getPrivate()))
                     .build(k.keyPair.getPrivate());
-
-            byte[] verifiedBootKey = BootKey.getBootKey();
-            byte[] verifiedBootHash = null;
-            try {
-                if (rootOfTrust instanceof ASN1Sequence r && r.size() >= 4) {
-                    ASN1Encodable maybeHash = r.getObjectAt(3);
-                    if (maybeHash instanceof DEROctetString os) {
-                        verifiedBootHash = os.getOctets();
-                    }
-                }
-            } catch (Throwable t) {
-                Log.w(ModuleMain.TAG, "failed to extract original boot hash", t);
-            }
-            if (verifiedBootHash == null) verifiedBootHash = BootKey.getBootHash();
-
-            ASN1Encodable[] rootOfTrustEnc = {
-                    new DEROctetString(verifiedBootKey),
-                    ASN1Boolean.TRUE,
-                    new ASN1Enumerated(0),
-                    new DEROctetString(verifiedBootHash)
-            };
-            ASN1Sequence hackedRootOfTrust = new DERSequence(rootOfTrustEnc);
-            ASN1TaggedObject rootOfTrustTagObj = new DERTaggedObject(704, hackedRootOfTrust);
-            vector.add(rootOfTrustTagObj);
 
             ASN1Sequence hackEnforced = new DERSequence(vector);
             encodables[7] = hackEnforced;
             ASN1Sequence hackedSeq = new DERSequence(encodables);
 
             ASN1OctetString hackedSeqOctets = new DEROctetString(hackedSeq);
-            Extension hackedExt = new Extension(OID, false, hackedSeqOctets);
+            Extension hackedExt = new Extension(OID, ext.isCritical(), hackedSeqOctets);
             builder.addExtension(hackedExt);
 
             for (ASN1ObjectIdentifier extensionOID : leafHolder.getExtensions().getExtensionOIDs()) {
-                if (OID.getId().equals(extensionOID.getId())) continue;
+                if (OID.equals(extensionOID) || Extension.authorityKeyIdentifier.equals(extensionOID)) continue;
                 builder.addExtension(leafHolder.getExtension(extensionOID));
             }
             certificates.addFirst(new JcaX509CertificateConverter().getCertificate(builder.build(signer)));
@@ -198,12 +188,14 @@ final class CertHack {
                     kp.getPublic()
             );
 
-            certBuilder.addExtension(Extension.keyUsage, true, new KeyUsage(KeyUsage.keyCertSign));
-            Extension keyDescription = createKeyDescriptionExtension(params);
-            if (keyDescription != null) certBuilder.addExtension(keyDescription);
+            int keyUsage = keyUsage(params.purpose);
+            if (keyUsage != 0) {
+                certBuilder.addExtension(Extension.keyUsage, true, new KeyUsage(keyUsage));
+            }
+            certBuilder.addExtension(createKeyDescriptionExtension(params));
 
-            String sigAlg = params.algorithm == KeymintConst.Algorithm.EC ? "SHA256withECDSA" : "SHA256withRSA";
-            ContentSigner signer = new JcaContentSignerBuilder(sigAlg).build(k.keyPair.getPrivate());
+            ContentSigner signer = new JcaContentSignerBuilder(signatureAlgorithm(k.keyPair.getPrivate()))
+                    .build(k.keyPair.getPrivate());
 
             X509CertificateHolder certHolder = certBuilder.build(signer);
             X509Certificate leaf = new JcaX509CertificateConverter().getCertificate(certHolder);
@@ -246,71 +238,69 @@ final class CertHack {
         return KeyPairGenerator.getInstance(algorithm);
     }
 
-    private static Extension createKeyDescriptionExtension(KeyGenParameters params) {
-        try {
-            ASN1Encodable[] rootOfTrustEnc = {
-                    new DEROctetString(BootKey.getBootKey()),
-                    ASN1Boolean.TRUE,
-                    new ASN1Enumerated(0),
-                    new DEROctetString(BootKey.getBootHash())
-            };
-            ASN1Sequence rootOfTrustSeq = new DERSequence(rootOfTrustEnc);
-
-            DERSet aPurpose = new DERSet(fromIntList(params.purpose));
-            ASN1Integer aAlgorithm = new ASN1Integer(params.algorithm);
-            ASN1Integer aKeySize = new ASN1Integer(params.keySize);
-            DERSet aDigest = new DERSet(fromIntList(params.digest));
-            ASN1Integer aEcCurve = new ASN1Integer(params.ecCurve);
-            DERNull aNoAuthRequired = DERNull.INSTANCE;
-            ASN1Integer aOsVersion = new ASN1Integer(BootKey.getOsVersion());
-            ASN1Integer aOsPatchLevel = new ASN1Integer(BootKey.getPatchLevel());
-            ASN1OctetString aApplicationID = createApplicationId();
-            ASN1Integer aBootPatchLevel = new ASN1Integer(BootKey.getPatchLevelLong());
-            ASN1Integer aVendorPatchLevel = new ASN1Integer(BootKey.getPatchLevelLong());
-            ASN1Integer aCreationDateTime = new ASN1Integer(System.currentTimeMillis());
-            ASN1Integer aOrigin = new ASN1Integer(0);
-
-            DERTaggedObject purpose = new DERTaggedObject(true, 1, aPurpose);
-            DERTaggedObject algorithm = new DERTaggedObject(true, 2, aAlgorithm);
-            DERTaggedObject keySize = new DERTaggedObject(true, 3, aKeySize);
-            DERTaggedObject digest = new DERTaggedObject(true, 5, aDigest);
-            DERTaggedObject ecCurve = new DERTaggedObject(true, 10, aEcCurve);
-            DERTaggedObject noAuthRequired = new DERTaggedObject(true, 503, aNoAuthRequired);
-            DERTaggedObject creationDateTime = new DERTaggedObject(true, 701, aCreationDateTime);
-            DERTaggedObject origin = new DERTaggedObject(true, 702, aOrigin);
-            DERTaggedObject rootOfTrust = new DERTaggedObject(true, 704, rootOfTrustSeq);
-            DERTaggedObject osVersion = new DERTaggedObject(true, 705, aOsVersion);
-            DERTaggedObject osPatchLevel = new DERTaggedObject(true, 706, aOsPatchLevel);
-            DERTaggedObject applicationID = aApplicationID != null
-                    ? new DERTaggedObject(true, 709, aApplicationID) : null;
-            DERTaggedObject vendorPatchLevel = new DERTaggedObject(true, 718, aVendorPatchLevel);
-            DERTaggedObject bootPatchLevel = new DERTaggedObject(true, 719, aBootPatchLevel);
-
-            List<ASN1Encodable> teeList = new ArrayList<>(Arrays.asList(
-                    purpose, algorithm, keySize, digest, ecCurve,
-                    noAuthRequired, origin, rootOfTrust,
-                    osVersion, osPatchLevel, vendorPatchLevel, bootPatchLevel));
-            ASN1Encodable[] teeEnforcedEncodables = teeList.toArray(new ASN1Encodable[0]);
-
-            List<ASN1Encodable> swList = new ArrayList<>();
-            if (applicationID != null) swList.add(applicationID);
-            swList.add(creationDateTime);
-            ASN1Encodable[] softwareEnforcedEncodables = swList.toArray(new ASN1Encodable[0]);
-
-            ASN1OctetString keyDescriptionOctetStr = wrapKeyDescription(
-                    teeEnforcedEncodables, softwareEnforcedEncodables, params);
-
-            return new Extension(OID, false, keyDescriptionOctetStr);
-        } catch (Throwable t) {
-            Log.e(ModuleMain.TAG, "createKeyDescriptionExtension failed", t);
-            return null;
+    private static Extension createKeyDescriptionExtension(KeyGenParameters params) throws IOException {
+        if (params.attestationChallenge == null) {
+            throw new IllegalArgumentException("attestation challenge is required");
         }
+
+        int attestationVersion = BootKey.getAttestationVersion();
+        ASN1OctetString applicationId = createApplicationId();
+        if (applicationId == null) {
+            throw new IllegalStateException("attestation application ID is unavailable");
+        }
+
+        List<ASN1Encodable> tee = new ArrayList<>();
+        tee.add(tag(1, new DERSet(fromIntList(params.purpose))));
+        tee.add(tag(2, new ASN1Integer(params.algorithm)));
+        tee.add(tag(3, new ASN1Integer(params.keySize)));
+        if (!params.digest.isEmpty()) {
+            tee.add(tag(5, new DERSet(fromIntList(params.digest))));
+        }
+        if (params.algorithm == KeymintConst.Algorithm.RSA && !params.padding.isEmpty()) {
+            tee.add(tag(6, new DERSet(fromIntList(params.padding))));
+        }
+        if (params.algorithm == KeymintConst.Algorithm.EC) {
+            tee.add(tag(10, new ASN1Integer(params.ecCurve)));
+        } else {
+            tee.add(tag(200, new ASN1Integer(params.rsaPublicExponent)));
+        }
+
+        if (params.userAuthenticationRequired) {
+            tee.add(tag(504, new ASN1Integer(params.userAuthenticationType)));
+            if (params.userAuthenticationTimeoutSeconds > 0) {
+                tee.add(tag(505, new ASN1Integer(params.userAuthenticationTimeoutSeconds)));
+            }
+            if (params.userAuthenticationValidWhileOnBody) tee.add(tag(506, DERNull.INSTANCE));
+            if (params.userPresenceRequired) tee.add(tag(507, DERNull.INSTANCE));
+            if (params.userConfirmationRequired) tee.add(tag(508, DERNull.INSTANCE));
+            if (params.unlockedDeviceRequired) tee.add(tag(509, DERNull.INSTANCE));
+        } else {
+            tee.add(tag(503, DERNull.INSTANCE));
+        }
+
+        tee.add(tag(702, new ASN1Integer(0)));
+        tee.add(tag(704, createRootOfTrust(attestationVersion, BootKey.getBootHash())));
+        tee.add(tag(705, new ASN1Integer(BootKey.getOsVersion())));
+        tee.add(tag(706, new ASN1Integer(BootKey.getPatchLevel())));
+        if (attestationVersion >= 3) {
+            Long vendorPatchLevel = BootKey.getVendorPatchLevel();
+            Long bootPatchLevel = BootKey.getBootPatchLevel();
+            if (vendorPatchLevel != null) tee.add(tag(718, new ASN1Integer(vendorPatchLevel)));
+            if (bootPatchLevel != null) tee.add(tag(719, new ASN1Integer(bootPatchLevel)));
+        }
+
+        ASN1Encodable[] software = {
+                tag(701, new ASN1Integer(System.currentTimeMillis())),
+                tag(709, applicationId)
+        };
+        return new Extension(OID, false, wrapKeyDescription(
+                tee.toArray(new ASN1Encodable[0]), software, params));
     }
 
     private static ASN1OctetString wrapKeyDescription(ASN1Encodable[] tee, ASN1Encodable[] sw, KeyGenParameters params) throws IOException {
-        ASN1Integer attestationVersion = new ASN1Integer(100);
+        ASN1Integer attestationVersion = new ASN1Integer(BootKey.getAttestationVersion());
         ASN1Enumerated attestationSecurityLevel = new ASN1Enumerated(1);
-        ASN1Integer keymasterVersion = new ASN1Integer(100);
+        ASN1Integer keymasterVersion = new ASN1Integer(BootKey.getKeymasterVersion());
         ASN1Enumerated keymasterSecurityLevel = new ASN1Enumerated(1);
         ASN1OctetString attestationChallenge = new DEROctetString(params.attestationChallenge);
         ASN1OctetString uniqueId = new DEROctetString(new byte[0]);
@@ -322,6 +312,46 @@ final class CertHack {
                 attestationChallenge, uniqueId, softwareEnforced, teeEnforced
         };
         return new DEROctetString(new DERSequence(keyDescriptionEncodables));
+    }
+
+    private static ASN1Sequence createRootOfTrust(int attestationVersion, byte[] verifiedBootHash) {
+        ASN1EncodableVector values = new ASN1EncodableVector();
+        values.add(new DEROctetString(BootKey.getBootKey()));
+        values.add(ASN1Boolean.TRUE);
+        values.add(new ASN1Enumerated(0));
+        if (attestationVersion >= 3) values.add(new DEROctetString(verifiedBootHash));
+        return new DERSequence(values);
+    }
+
+    private static DERTaggedObject tag(int number, ASN1Encodable value) {
+        return new DERTaggedObject(true, number, value);
+    }
+
+    private static int keyUsage(List<Integer> purposes) {
+        int usage = 0;
+        for (int purpose : purposes) {
+            switch (purpose) {
+                case KeymintConst.KeyPurpose.ENCRYPT, KeymintConst.KeyPurpose.DECRYPT ->
+                        usage |= KeyUsage.keyEncipherment | KeyUsage.dataEncipherment;
+                case KeymintConst.KeyPurpose.SIGN, KeymintConst.KeyPurpose.VERIFY ->
+                        usage |= KeyUsage.digitalSignature;
+                case KeymintConst.KeyPurpose.WRAP_KEY -> usage |= KeyUsage.keyEncipherment;
+                case KeymintConst.KeyPurpose.AGREE_KEY -> usage |= KeyUsage.keyAgreement;
+                case KeymintConst.KeyPurpose.ATTEST_KEY -> usage |= KeyUsage.keyCertSign;
+                default -> {
+                }
+            }
+        }
+        return usage;
+    }
+
+    private static String signatureAlgorithm(PrivateKey key) {
+        String algorithm = key.getAlgorithm();
+        if ("EC".equalsIgnoreCase(algorithm) || "ECDSA".equalsIgnoreCase(algorithm)) {
+            return "SHA256withECDSA";
+        }
+        if ("RSA".equalsIgnoreCase(algorithm)) return "SHA256withRSA";
+        throw new IllegalArgumentException("Unsupported signing key algorithm " + algorithm);
     }
 
     private static ASN1OctetString createApplicationId() {
@@ -343,7 +373,9 @@ final class CertHack {
                 PackageInfo info = loadPackageInfo(pm, name);
                 ASN1Encodable[] arr = new ASN1Encodable[2];
                 arr[0] = new DEROctetString(name.getBytes(StandardCharsets.UTF_8));
-                arr[1] = new ASN1Integer(info != null ? info.getLongVersionCode() : 0L);
+                long versionCode = info == null ? 0L : Build.VERSION.SDK_INT >= Build.VERSION_CODES.P
+                        ? info.getLongVersionCode() : info.versionCode;
+                arr[1] = new ASN1Integer(versionCode);
                 packageInfoAA[i] = new DERSequence(arr);
 
                 for (byte[] sigBytes : extractSignatureBytes(info)) {

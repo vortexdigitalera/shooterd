@@ -68,6 +68,7 @@ android {
             excludes += "META-INF/*.kotlin_module"
             excludes += "META-INF/versions/**"
             excludes += "META-INF/INDEX.LIST"
+            excludes += "META-INF/LICENSE.md"
         }
     }
 
@@ -83,4 +84,5 @@ dependencies {
     implementation(libs.bouncycastle.bcpkix)
     implementation(libs.androidx.appcompat)
     implementation(libs.material)
+    testImplementation("junit:junit:4.13.2")
 }

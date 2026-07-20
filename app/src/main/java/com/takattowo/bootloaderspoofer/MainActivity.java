@@ -4,7 +4,6 @@ import android.content.ComponentName;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.os.Bundle;
-import android.os.ParcelFileDescriptor;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.widget.ImageView;
@@ -19,13 +18,7 @@ import com.google.android.material.card.MaterialCardView;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.google.android.material.materialswitch.MaterialSwitch;
 
-import java.io.ByteArrayOutputStream;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
-import java.util.HashSet;
 
 import io.github.libxposed.service.XposedService;
 
@@ -151,11 +144,11 @@ public class MainActivity extends AppCompatActivity implements App.ServiceStateL
 
     private String keyboxSourceLabel() {
         String xml = readRemoteString(Config.KEYBOX_FILE);
-        if (xml == null || xml.trim().isEmpty()) return "bundled (AOSP)";
         try {
             KeyboxLoader.Result r = KeyboxLoader.loadFromXmlOrBundled(xml);
-            if (r.userEC && r.userRSA) return "user";
-            if (r.userEC || r.userRSA) return "user + bundled";
+            String source = r.userEC && r.userRSA ? "user"
+                    : r.userEC || r.userRSA ? "user + bundled" : "bundled (AOSP)";
+            return r.ecExpired || r.rsaExpired ? source + " (expired)" : source;
         } catch (Throwable ignored) {
         }
         return "bundled (AOSP)";
@@ -203,9 +196,11 @@ public class MainActivity extends AppCompatActivity implements App.ServiceStateL
             if (v.getId() == R.id.mode_row_leaf)      { chosen = Config.MODE_LEAF_HACK; }
             else if (v.getId() == R.id.mode_row_cert) { chosen = Config.MODE_CERT_GENERATE; }
             else                                      { chosen = Config.MODE_OFF; }
-            writeRemoteString(Config.MODE_FILE, chosen);
-            updateModeRow();
-            dialog.dismiss();
+            if (writeRemoteString(Config.MODE_FILE, chosen)) {
+                updateModeRow();
+                toast(getString(R.string.toast_restart_required));
+                dialog.dismiss();
+            }
         };
         view.findViewById(R.id.mode_row_leaf).setOnClickListener(pick);
         view.findViewById(R.id.mode_row_cert).setOnClickListener(pick);
@@ -272,57 +267,25 @@ public class MainActivity extends AppCompatActivity implements App.ServiceStateL
 
     // --- remote file helpers ---
 
-    private boolean remoteFileExists(String name) {
-        XposedService svc = service;
-        if (svc == null) return false;
-        try {
-            String[] list = svc.listRemoteFiles();
-            return list != null && new HashSet<>(Arrays.asList(list)).contains(name);
-        } catch (Throwable t) {
-            return false;
-        }
-    }
-
     private String readRemoteString(String name) {
         XposedService svc = service;
         if (svc == null) return null;
-        if (!remoteFileExists(name)) return null;
-        ParcelFileDescriptor pfd = null;
         try {
-            pfd = svc.openRemoteFile(name);
-            if (pfd == null) return null;
-            try (FileInputStream in = new FileInputStream(pfd.getFileDescriptor())) {
-                ByteArrayOutputStream baos = new ByteArrayOutputStream();
-                byte[] buf = new byte[8192];
-                int n;
-                while ((n = in.read(buf)) > 0) baos.write(buf, 0, n);
-                return baos.toString("UTF-8");
-            }
+            return ServiceFiles.readString(svc, name, KeyboxLoader.MAX_XML_BYTES);
         } catch (Throwable t) {
             return null;
-        } finally {
-            if (pfd != null) try { pfd.close(); } catch (Throwable ignored) {}
         }
     }
 
     private boolean writeRemoteString(String name, String content) {
         XposedService svc = service;
         if (svc == null) { toast(getString(R.string.toast_not_connected)); return false; }
-        try { svc.deleteRemoteFile(name); } catch (Throwable ignored) {}
-        ParcelFileDescriptor pfd = null;
         try {
-            pfd = svc.openRemoteFile(name);
-            if (pfd == null) throw new IOException("openRemoteFile returned null");
-            try (FileOutputStream out = new FileOutputStream(pfd.getFileDescriptor())) {
-                out.write(content.getBytes(StandardCharsets.UTF_8));
-                out.getFD().sync();
-            }
+            ServiceFiles.replaceString(svc, name, content, 1024);
             return true;
         } catch (Throwable t) {
             toast("Write failed: " + t.getMessage());
             return false;
-        } finally {
-            if (pfd != null) try { pfd.close(); } catch (Throwable ignored) {}
         }
     }
 

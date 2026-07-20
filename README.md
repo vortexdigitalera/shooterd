@@ -45,7 +45,7 @@ XML format (TrickyStore-compatible subset):
 ... your EC private key ...
 -----END EC PRIVATE KEY-----</PrivateKey>
       <CertificateChain>
-        <NumberOfCertificates>3</NumberOfCertificates>
+        <NumberOfCertificates>2</NumberOfCertificates>
         <Certificate format="pem">-----BEGIN CERTIFICATE-----
 ... intermediate ...
 -----END CERTIFICATE-----</Certificate>
@@ -63,6 +63,8 @@ XML format (TrickyStore-compatible subset):
   </Keybox>
 </AndroidAttestation>
 ```
+
+Restart scoped apps after changing the mode or keybox so their injected module process reloads it.
 
 ## Build (local)
 

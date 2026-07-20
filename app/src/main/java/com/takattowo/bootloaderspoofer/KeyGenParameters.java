@@ -2,6 +2,7 @@ package com.takattowo.bootloaderspoofer;
 
 import android.security.keystore.KeyGenParameterSpec;
 import android.security.keystore.KeyProperties;
+import android.os.Build;
 
 import org.bouncycastle.asn1.x500.X500Name;
 
@@ -31,6 +32,15 @@ final class KeyGenParameters {
 
     final List<Integer> purpose = new ArrayList<>();
     final List<Integer> digest = new ArrayList<>();
+    final List<Integer> padding = new ArrayList<>();
+
+    boolean userAuthenticationRequired;
+    long userAuthenticationType;
+    int userAuthenticationTimeoutSeconds = -1;
+    boolean userAuthenticationValidWhileOnBody;
+    boolean userPresenceRequired;
+    boolean userConfirmationRequired;
+    boolean unlockedDeviceRequired;
 
     byte[] attestationChallenge;
     String alias;
@@ -38,9 +48,13 @@ final class KeyGenParameters {
     static KeyGenParameters from(KeyGenParameterSpec spec, String requestedAlgorithm) {
         KeyGenParameters p = new KeyGenParameters();
         p.alias = spec.getKeystoreAlias();
-        p.algorithm = "EC".equalsIgnoreCase(requestedAlgorithm)
-                ? KeymintConst.Algorithm.EC
-                : KeymintConst.Algorithm.RSA;
+        if ("EC".equalsIgnoreCase(requestedAlgorithm)) {
+            p.algorithm = KeymintConst.Algorithm.EC;
+        } else if ("RSA".equalsIgnoreCase(requestedAlgorithm)) {
+            p.algorithm = KeymintConst.Algorithm.RSA;
+        } else {
+            throw new IllegalArgumentException("Unsupported key algorithm " + requestedAlgorithm);
+        }
 
         int specSize = spec.getKeySize();
         if (specSize > 0) {
@@ -87,28 +101,52 @@ final class KeyGenParameters {
         } catch (Throwable ignored) {
         }
 
-        String[] digests = spec.getDigests();
-        if (digests != null) {
-            for (String d : digests) p.digest.add(digestStringToInt(d));
+        if (spec.isDigestsSpecified()) {
+            String[] digests = spec.getDigests();
+            if (digests != null) {
+                for (String d : digests) addUnique(p.digest, digestStringToInt(d));
+            }
         }
-        if (p.digest.isEmpty()) {
-            p.digest.add(KeymintConst.Digest.SHA_2_256);
+
+        for (String padding : spec.getEncryptionPaddings()) {
+            addUnique(p.padding, paddingStringToInt(padding));
+        }
+        for (String padding : spec.getSignaturePaddings()) {
+            addUnique(p.padding, paddingStringToInt(padding));
         }
 
         p.attestationChallenge = spec.getAttestationChallenge();
-        if (p.attestationChallenge == null) p.attestationChallenge = new byte[0];
+
+        p.userAuthenticationRequired = spec.isUserAuthenticationRequired();
+        if (p.userAuthenticationRequired) {
+            p.userAuthenticationTimeoutSeconds = spec.getUserAuthenticationValidityDurationSeconds();
+            p.userAuthenticationType = Build.VERSION.SDK_INT >= Build.VERSION_CODES.R
+                    ? spec.getUserAuthenticationType()
+                    : 0xffffffffL;
+            p.userAuthenticationValidWhileOnBody = spec.isUserAuthenticationValidWhileOnBody();
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                p.userPresenceRequired = spec.isUserPresenceRequired();
+                p.userConfirmationRequired = spec.isUserConfirmationRequired();
+                p.unlockedDeviceRequired = spec.isUnlockedDeviceRequired();
+            }
+        }
 
         return p;
+    }
+
+    private static void addUnique(List<Integer> values, int value) {
+        if (!values.contains(value)) values.add(value);
     }
 
     private static int curveNameToInt(String name) {
         if (name == null) return KeymintConst.EcCurve.P_256;
         String n = name.toLowerCase();
         if (n.contains("224")) return KeymintConst.EcCurve.P_224;
+        if (n.contains("256")) return KeymintConst.EcCurve.P_256;
         if (n.contains("384")) return KeymintConst.EcCurve.P_384;
         if (n.contains("521") || n.contains("512")) return KeymintConst.EcCurve.P_521;
         if (n.contains("25519")) return KeymintConst.EcCurve.CURVE_25519;
-        return KeymintConst.EcCurve.P_256;
+        throw new IllegalArgumentException("Unsupported EC curve " + name);
     }
 
     private static String sizeToCurveName(int size) {
@@ -132,7 +170,7 @@ final class KeyGenParameters {
     }
 
     private static int digestStringToInt(String s) {
-        if (s == null) return KeymintConst.Digest.NONE;
+        if (s == null) throw new IllegalArgumentException("Null digest");
         switch (s) {
             case KeyProperties.DIGEST_NONE: return KeymintConst.Digest.NONE;
             case KeyProperties.DIGEST_MD5: return KeymintConst.Digest.MD5;
@@ -141,8 +179,21 @@ final class KeyGenParameters {
             case KeyProperties.DIGEST_SHA256: return KeymintConst.Digest.SHA_2_256;
             case KeyProperties.DIGEST_SHA384: return KeymintConst.Digest.SHA_2_384;
             case KeyProperties.DIGEST_SHA512: return KeymintConst.Digest.SHA_2_512;
-            default: return KeymintConst.Digest.SHA_2_256;
+            default: throw new IllegalArgumentException("Unsupported digest " + s);
         }
+    }
+
+    private static int paddingStringToInt(String s) {
+        if (KeyProperties.ENCRYPTION_PADDING_NONE.equals(s)) return KeymintConst.Padding.NONE;
+        if (KeyProperties.ENCRYPTION_PADDING_RSA_OAEP.equals(s)) return KeymintConst.Padding.RSA_OAEP;
+        if (KeyProperties.SIGNATURE_PADDING_RSA_PSS.equals(s)) return KeymintConst.Padding.RSA_PSS;
+        if (KeyProperties.ENCRYPTION_PADDING_RSA_PKCS1.equals(s)) {
+            return KeymintConst.Padding.RSA_PKCS1_1_5_ENCRYPT;
+        }
+        if (KeyProperties.SIGNATURE_PADDING_RSA_PKCS1.equals(s)) {
+            return KeymintConst.Padding.RSA_PKCS1_1_5_SIGN;
+        }
+        throw new IllegalArgumentException("Unsupported padding " + s);
     }
 
     private KeyGenParameters() {}

@@ -43,6 +43,7 @@ public class App extends Application implements XposedServiceHelper.OnServiceLis
 
     @Override
     public void onServiceDied(XposedService service) {
+        if (sService != service) return;
         sService = null;
         for (ServiceStateListener l : sListeners) l.onServiceStateChanged(null);
     }

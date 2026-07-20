@@ -6,17 +6,25 @@ import android.util.Log;
 import org.bouncycastle.openssl.PEMKeyPair;
 import org.bouncycastle.openssl.PEMParser;
 import org.bouncycastle.util.io.pem.PemReader;
+import org.w3c.dom.Document;
+import org.w3c.dom.Element;
+import org.w3c.dom.Node;
+import org.xml.sax.InputSource;
 
 import java.io.ByteArrayInputStream;
 import java.io.StringReader;
+import java.nio.charset.StandardCharsets;
 import java.security.cert.Certificate;
 import java.security.cert.CertificateFactory;
 import java.security.cert.X509Certificate;
 import java.text.SimpleDateFormat;
+import java.util.ArrayList;
 import java.util.Date;
 import java.util.LinkedList;
+import java.util.List;
 import java.util.Locale;
-import java.util.Objects;
+
+import javax.xml.parsers.DocumentBuilderFactory;
 
 /**
  * Loads keyboxes into a KeyboxRegistry from TrickyStore-format XML, with per-algorithm
@@ -25,6 +33,8 @@ import java.util.Objects;
  * Caller-agnostic - safe to use from module process (UI) or target process.
  */
 final class KeyboxLoader {
+
+    static final int MAX_XML_BYTES = 1024 * 1024;
 
     static final class Result {
         final KeyboxRegistry registry;
@@ -52,37 +62,20 @@ final class KeyboxLoader {
     }
 
     static Result loadFromXmlOrBundled(String xml) {
-        KeyboxRegistry registry = new KeyboxRegistry();
+        KeyboxRegistry registry = null;
         boolean ec = false;
         boolean rsa = false;
 
-        if (xml != null) {
+        if (xml != null && !xml.trim().isEmpty()) {
             try {
-                XMLParser parser = new XMLParser(xml);
-                int numberOfKeyboxes = Integer.parseInt(Objects.requireNonNull(
-                        parser.obtainPath("AndroidAttestation.NumberOfKeyboxes").get("text")).trim());
-                for (int i = 0; i < numberOfKeyboxes; i++) {
-                    String algo = parser.obtainPath("AndroidAttestation.Keybox.Key[" + i + "]").get("algorithm");
-                    String privateKey = parser.obtainPath("AndroidAttestation.Keybox.Key[" + i + "].PrivateKey").get("text");
-                    int numCerts = Integer.parseInt(Objects.requireNonNull(parser.obtainPath(
-                            "AndroidAttestation.Keybox.Key[" + i + "].CertificateChain.NumberOfCertificates").get("text")).trim());
-                    LinkedList<Certificate> chain = new LinkedList<>();
-                    for (int j = 0; j < numCerts; j++) {
-                        String certText = parser.obtainPath(
-                                "AndroidAttestation.Keybox.Key[" + i + "].CertificateChain.Certificate[" + j + "]").get("text");
-                        chain.add(parseCert(certText));
-                    }
-                    String key = "ecdsa".equalsIgnoreCase(algo)
-                            ? KeyProperties.KEY_ALGORITHM_EC
-                            : KeyProperties.KEY_ALGORITHM_RSA;
-                    registry.put(key, parseKeyPair(privateKey), chain);
-                    if (KeyProperties.KEY_ALGORITHM_EC.equals(key)) ec = true;
-                    else rsa = true;
-                }
+                registry = parseUserXml(xml);
+                ec = registry.has(KeyProperties.KEY_ALGORITHM_EC);
+                rsa = registry.has(KeyProperties.KEY_ALGORITHM_RSA);
             } catch (Throwable t) {
                 Log.w(ModuleMain.TAG, "parse keybox.xml failed; will fall back to bundled", t);
             }
         }
+        if (registry == null) registry = new KeyboxRegistry();
 
         boolean userEC = ec;
         boolean userRSA = rsa;
@@ -128,6 +121,96 @@ final class KeyboxLoader {
                 ecInfo.text, rsaInfo.text, ecInfo.expired, rsaInfo.expired);
     }
 
+    static KeyboxRegistry validateUserXml(String xml) throws Exception {
+        return parseUserXml(xml);
+    }
+
+    private static KeyboxRegistry parseUserXml(String xml) throws Exception {
+        if (xml == null || xml.trim().isEmpty()) throw new IllegalArgumentException("Empty keybox");
+        if (xml.length() > MAX_XML_BYTES
+                || xml.getBytes(StandardCharsets.UTF_8).length > MAX_XML_BYTES) {
+            throw new IllegalArgumentException("Keybox exceeds 1 MiB");
+        }
+        if (xml.contains("<!DOCTYPE")) {
+            throw new IllegalArgumentException("DOCTYPE is not allowed");
+        }
+
+        DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+        factory.setExpandEntityReferences(false);
+        factory.setNamespaceAware(false);
+        var builder = factory.newDocumentBuilder();
+        builder.setEntityResolver((publicId, systemId) -> new InputSource(new StringReader("")));
+        Document document = builder.parse(new InputSource(new StringReader(xml)));
+
+        Element root = document.getDocumentElement();
+        if (root == null || !"AndroidAttestation".equals(root.getTagName())) {
+            throw new IllegalArgumentException("Missing AndroidAttestation root");
+        }
+        int declaredKeyboxes = Integer.parseInt(text(requiredChild(root, "NumberOfKeyboxes")));
+        List<Element> keyboxes = children(root, "Keybox");
+        if (declaredKeyboxes != 1 || keyboxes.size() != 1) {
+            throw new IllegalArgumentException("Exactly one Keybox is required");
+        }
+
+        List<Element> keys = children(keyboxes.get(0), "Key");
+        if (keys.isEmpty()) throw new IllegalArgumentException("Keybox contains no keys");
+
+        KeyboxRegistry registry = new KeyboxRegistry();
+        for (Element keyElement : keys) {
+            String declaredAlgorithm = keyElement.getAttribute("algorithm");
+            String algorithm;
+            if ("ecdsa".equalsIgnoreCase(declaredAlgorithm)
+                    || "ec".equalsIgnoreCase(declaredAlgorithm)) {
+                algorithm = KeyProperties.KEY_ALGORITHM_EC;
+            } else if ("rsa".equalsIgnoreCase(declaredAlgorithm)) {
+                algorithm = KeyProperties.KEY_ALGORITHM_RSA;
+            } else {
+                throw new IllegalArgumentException("Unsupported key algorithm " + declaredAlgorithm);
+            }
+            if (registry.has(algorithm)) {
+                throw new IllegalArgumentException("Duplicate " + algorithm + " key");
+            }
+
+            String privateKey = requiredChild(keyElement, "PrivateKey").getTextContent();
+            Element chainElement = requiredChild(keyElement, "CertificateChain");
+            int declaredCertificates = Integer.parseInt(text(
+                    requiredChild(chainElement, "NumberOfCertificates")));
+            List<Element> certificateElements = children(chainElement, "Certificate");
+            if (declaredCertificates <= 0 || declaredCertificates != certificateElements.size()) {
+                throw new IllegalArgumentException("Certificate count mismatch for " + algorithm);
+            }
+
+            LinkedList<Certificate> chain = new LinkedList<>();
+            for (Element certificateElement : certificateElements) {
+                chain.add(parseCert(certificateElement.getTextContent()));
+            }
+            registry.put(algorithm, parseKeyPair(privateKey), chain);
+        }
+        return registry;
+    }
+
+    private static Element requiredChild(Element parent, String name) {
+        List<Element> matches = children(parent, name);
+        if (matches.size() != 1) {
+            throw new IllegalArgumentException("Expected one " + name + " element");
+        }
+        return matches.get(0);
+    }
+
+    private static List<Element> children(Element parent, String name) {
+        List<Element> matches = new ArrayList<>();
+        for (Node node = parent.getFirstChild(); node != null; node = node.getNextSibling()) {
+            if (node instanceof Element element && name.equals(element.getTagName())) {
+                matches.add(element);
+            }
+        }
+        return matches;
+    }
+
+    private static String text(Element element) {
+        return element.getTextContent().trim();
+    }
+
     private static final class ExpiryInfo {
         final String text;
         final boolean expired;
@@ -155,23 +238,40 @@ final class KeyboxLoader {
         return new ExpiryInfo(fmt.format(earliest) + (anyExpired ? " EXPIRED" : ""), anyExpired);
     }
 
-    private static LinkedList<Certificate> parseChain(String... pems) throws Throwable {
+    private static LinkedList<Certificate> parseChain(String... pems) throws Exception {
         LinkedList<Certificate> out = new LinkedList<>();
         for (String pem : pems) out.add(parseCert(pem));
         return out;
     }
 
-    private static PEMKeyPair parseKeyPair(String key) throws Throwable {
-        try (PEMParser parser = new PEMParser(new StringReader(XMLParser.trimLine(key)))) {
-            return (PEMKeyPair) parser.readObject();
+    private static PEMKeyPair parseKeyPair(String key) throws Exception {
+        try (PEMParser parser = new PEMParser(new StringReader(normalizePem(key)))) {
+            Object parsed = parser.readObject();
+            if (!(parsed instanceof PEMKeyPair keyPair)) {
+                throw new IllegalArgumentException("PrivateKey is not an EC/RSA PEM key pair");
+            }
+            return keyPair;
         }
     }
 
-    private static Certificate parseCert(String cert) throws Throwable {
-        try (PemReader reader = new PemReader(new StringReader(XMLParser.trimLine(cert)))) {
+    private static Certificate parseCert(String cert) throws Exception {
+        try (PemReader reader = new PemReader(new StringReader(normalizePem(cert)))) {
+            var pem = reader.readPemObject();
+            if (pem == null) throw new IllegalArgumentException("Invalid certificate PEM");
             return CertificateFactory.getInstance("X.509")
-                    .generateCertificate(new ByteArrayInputStream(reader.readPemObject().getContent()));
+                    .generateCertificate(new ByteArrayInputStream(pem.getContent()));
         }
+    }
+
+    private static String normalizePem(String value) {
+        if (value == null) return "";
+        String[] lines = value.trim().split("\\r?\\n");
+        StringBuilder normalized = new StringBuilder();
+        for (String line : lines) {
+            if (normalized.length() > 0) normalized.append('\n');
+            normalized.append(line.trim());
+        }
+        return normalized.toString();
     }
 
     private KeyboxLoader() {}
