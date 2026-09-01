@@ -35,6 +35,9 @@ public class MainActivity extends AppCompatActivity implements App.ServiceStateL
     private LinearLayout rowMode;
     private TextView rowModeValue;
 
+    private LinearLayout rowBootstate;
+    private TextView rowBootstateValue;
+
     private View rowHideIcon;
     private MaterialSwitch hideIconSwitch;
     private TextView hideIconSubtitle;
@@ -58,6 +61,10 @@ public class MainActivity extends AppCompatActivity implements App.ServiceStateL
         rowMode = findViewById(R.id.row_mode);
         rowModeValue = findViewById(R.id.row_mode_value);
         rowMode.setOnClickListener(v -> showModeDialog());
+
+        rowBootstate = findViewById(R.id.row_bootstate);
+        rowBootstateValue = findViewById(R.id.row_bootstate_value);
+        rowBootstate.setOnClickListener(v -> onBootstateTapped());
 
         rowHideIcon = findViewById(R.id.row_hide_icon);
         hideIconSwitch = findViewById(R.id.row_hide_icon_switch);
@@ -116,6 +123,7 @@ public class MainActivity extends AppCompatActivity implements App.ServiceStateL
     private void refreshDynamic() {
         updateStatusCard();
         updateModeRow();
+        updateBootstateRow();
     }
 
     private void updateStatusCard() {
@@ -168,6 +176,30 @@ public class MainActivity extends AppCompatActivity implements App.ServiceStateL
     private String currentMode() {
         if (service == null) return Config.MODE_LEAF_HACK;
         return Config.normalizeMode(readRemoteString(Config.MODE_FILE));
+    }
+
+    private void updateBootstateRow() {
+        String state = currentBootState();
+        rowBootstateValue.setText(getString(
+                Config.BOOTSTATE_UNLOCKED.equals(state)
+                        ? R.string.bootstate_unlocked
+                        : R.string.bootstate_locked));
+    }
+
+    private String currentBootState() {
+        if (service == null) return Config.BOOTSTATE_LOCKED;
+        return Config.normalizeBootState(readRemoteString(Config.BOOTSTATE_FILE));
+    }
+
+    private void onBootstateTapped() {
+        if (service == null) { toast(getString(R.string.toast_not_connected)); return; }
+        String current = currentBootState();
+        String next = Config.BOOTSTATE_LOCKED.equals(current)
+                ? Config.BOOTSTATE_UNLOCKED : Config.BOOTSTATE_LOCKED;
+        if (writeRemoteString(Config.BOOTSTATE_FILE, next)) {
+            updateBootstateRow();
+            toast(getString(R.string.toast_restart_required));
+        }
     }
 
     private void showModeDialog() {

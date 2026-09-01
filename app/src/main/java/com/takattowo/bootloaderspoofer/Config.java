@@ -5,10 +5,14 @@ final class Config {
 
     static final String KEYBOX_FILE = "keybox.xml";
     static final String MODE_FILE = "mode.txt";
+    static final String BOOTSTATE_FILE = "bootstate.txt";
 
     static final String MODE_LEAF_HACK = "leaf_hack";
     static final String MODE_CERT_GENERATE = "cert_generate";
     static final String MODE_OFF = "off";
+
+    static final String BOOTSTATE_LOCKED = "locked";
+    static final String BOOTSTATE_UNLOCKED = "unlocked";
 
     static String normalizeMode(String raw) {
         if (raw == null) return MODE_LEAF_HACK;
@@ -21,6 +25,12 @@ final class Config {
             default:
                 return MODE_LEAF_HACK;
         }
+    }
+
+    static String normalizeBootState(String raw) {
+        if (raw == null) return BOOTSTATE_LOCKED;
+        return BOOTSTATE_UNLOCKED.equals(raw.trim().toLowerCase())
+                ? BOOTSTATE_UNLOCKED : BOOTSTATE_LOCKED;
     }
 
     private Config() {}

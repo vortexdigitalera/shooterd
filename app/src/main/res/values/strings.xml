@@ -26,6 +26,10 @@
     <string name="mode_off_title">Off</string>
     <string name="mode_off_desc">No hooks installed.</string>
 
+    <string name="row_bootstate_title">Bootloader state</string>
+    <string name="bootstate_locked">Locked (verified boot green)</string>
+    <string name="bootstate_unlocked">Unlocked (verified boot orange)</string>
+
     <string name="row_pick_title">Load keybox file</string>
     <string name="row_pick_subtitle">Pick a keybox.xml from device storage</string>
     <string name="row_edit_title">Edit keybox</string>

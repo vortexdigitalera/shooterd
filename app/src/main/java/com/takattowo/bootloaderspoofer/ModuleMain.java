@@ -3,6 +3,7 @@ package com.takattowo.bootloaderspoofer;
 import android.content.pm.PackageManager;
 import android.os.Build;
 import android.security.keystore.KeyGenParameterSpec;
+import android.security.keystore.KeyInfo;
 import android.security.keystore.KeyProperties;
 import android.util.Log;
 
@@ -17,6 +18,7 @@ import java.security.SecureRandom;
 import java.security.cert.Certificate;
 import java.security.spec.AlgorithmParameterSpec;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.WeakHashMap;
 import java.util.concurrent.ConcurrentHashMap;
@@ -29,11 +31,40 @@ public class ModuleMain extends XposedModule {
 
     private volatile KeyboxRegistry registry;
     private volatile String mode = Config.MODE_LEAF_HACK;
+    private volatile String bootState = Config.BOOTSTATE_LOCKED;
     private volatile boolean loaded = false;
 
     private final Map<Object, KeyGenParameters> specByGenerator =
             Collections.synchronizedMap(new WeakHashMap<>());
     private final Map<String, Certificate[]> chainByAlias = new ConcurrentHashMap<>();
+
+    /** System property overrides applied when bootState=unlocked. */
+    private static final Map<String, String> PROPS_UNLOCKED;
+    static {
+        Map<String, String> m = new HashMap<>();
+        m.put("ro.boot.verifiedbootstate", "orange");
+        m.put("ro.boot.flash.locked", "0");
+        m.put("ro.boot.vbmeta.device_state", "unlocked");
+        m.put("ro.boot.warranty_bit", "1");
+        m.put("ro.bootimage.build.tags", "release-keys");
+        m.put("ro.build.tags", "release-keys");
+        m.put("sys.oem_unlock_allowed", "1");
+        PROPS_UNLOCKED = Collections.unmodifiableMap(m);
+    }
+
+    /** System property overrides applied when bootState=locked (ensure consistency). */
+    private static final Map<String, String> PROPS_LOCKED;
+    static {
+        Map<String, String> m = new HashMap<>();
+        m.put("ro.boot.verifiedbootstate", "green");
+        m.put("ro.boot.flash.locked", "1");
+        m.put("ro.boot.vbmeta.device_state", "locked");
+        m.put("ro.boot.warranty_bit", "0");
+        m.put("ro.bootimage.build.tags", "release-keys");
+        m.put("ro.build.tags", "release-keys");
+        m.put("sys.oem_unlock_allowed", "0");
+        PROPS_LOCKED = Collections.unmodifiableMap(m);
+    }
 
     @Override
     public void onModuleLoaded(ModuleLoadedParam param) {
@@ -52,6 +83,8 @@ public class ModuleMain extends XposedModule {
 
         ClassLoader cl = param.getDefaultClassLoader();
         hookPackageManager(cl);
+        hookSystemProperties(cl);
+        hookBuildTags();
 
         Class<?> delegateClass = probeKeyPairGeneratorClass();
         if (delegateClass != null) {
@@ -78,11 +111,12 @@ public class ModuleMain extends XposedModule {
         KeyboxLoader.Result r = KeyboxLoader.loadFromXmlOrBundled(xml);
         registry = r.registry;
         mode = Config.normalizeMode(RemoteFiles.read(this, Config.MODE_FILE));
+        bootState = Config.normalizeBootState(RemoteFiles.read(this, Config.BOOTSTATE_FILE));
         loaded = true;
         log(Log.INFO, TAG, "keybox source=" + r.source
                 + " (userEC=" + r.userEC + " userRSA=" + r.userRSA + ")"
                 + " EC expiry=" + r.ecExpiry + " RSA expiry=" + r.rsaExpiry
-                + " mode=" + mode);
+                + " mode=" + mode + " bootState=" + bootState);
         if (r.ecExpired || r.rsaExpired) {
             log(Log.ERROR, TAG, "*** KEYBOX CHAIN EXPIRED *** Attestation will be rejected. "
                     + "Open the Bootloader Spoofer app and load a fresh keybox.xml.");
@@ -112,6 +146,86 @@ public class ModuleMain extends XposedModule {
             return Boolean.FALSE;
         }
         return chain.proceed();
+    }
+
+    // --- SystemProperties spoofing ---
+
+    private void hookSystemProperties(ClassLoader cl) {
+        try {
+            Class<?> spClass = Class.forName("android.os.SystemProperties", false, cl);
+            Map<String, String> props = Config.BOOTSTATE_UNLOCKED.equals(bootState)
+                    ? PROPS_UNLOCKED : PROPS_LOCKED;
+
+            // Hook get(String)
+            Method get1 = findDeclaredMethod(spClass, "get", String.class);
+            if (get1 != null) {
+                hook(get1).intercept(chain -> {
+                    String key = (String) chain.getArg(0);
+                    String spoofed = props.get(key);
+                    if (spoofed != null) return spoofed;
+                    return chain.proceed();
+                });
+            }
+
+            // Hook get(String, String)
+            Method get2 = findDeclaredMethod(spClass, "get", String.class, String.class);
+            if (get2 != null) {
+                hook(get2).intercept(chain -> {
+                    String key = (String) chain.getArg(0);
+                    String spoofed = props.get(key);
+                    if (spoofed != null) return spoofed;
+                    return chain.proceed();
+                });
+            }
+
+            // Hook getBoolean(String, boolean)
+            Method getBool = findDeclaredMethod(spClass, "getBoolean", String.class, boolean.class);
+            if (getBool != null) {
+                hook(getBool).intercept(chain -> {
+                    String key = (String) chain.getArg(0);
+                    String spoofed = props.get(key);
+                    if (spoofed != null) return "1".equals(spoofed) || "true".equals(spoofed);
+                    return chain.proceed();
+                });
+            }
+
+            // Hook getInt(String, int)
+            Method getInt = findDeclaredMethod(spClass, "getInt", String.class, int.class);
+            if (getInt != null) {
+                hook(getInt).intercept(chain -> {
+                    String key = (String) chain.getArg(0);
+                    String spoofed = props.get(key);
+                    if (spoofed != null) {
+                        try { return Integer.parseInt(spoofed); } catch (NumberFormatException e) { return chain.getArg(1); }
+                    }
+                    return chain.proceed();
+                });
+            }
+
+            log(Log.INFO, TAG, "hooked SystemProperties (" + props.size() + " props, bootState=" + bootState + ")");
+        } catch (Throwable t) {
+            log(Log.ERROR, TAG, "SystemProperties hook failed", t);
+        }
+    }
+
+    // --- Build.TAGS spoofing ---
+
+    private void hookBuildTags() {
+        try {
+            Field tagsField = Build.class.getDeclaredField("TAGS");
+            tagsField.setAccessible(true);
+            // Remove final modifier so we can set the field
+            Field modifiersField = Field.class.getDeclaredField("accessFlags");
+            modifiersField.setAccessible(true);
+            modifiersField.setInt(tagsField, tagsField.getModifiers() & ~Modifier.FINAL);
+            String current = (String) tagsField.get(null);
+            if (current != null && current.contains("test-keys")) {
+                tagsField.set(null, "release-keys");
+                log(Log.INFO, TAG, "spoofed Build.TAGS: " + current + " -> release-keys");
+            }
+        } catch (Throwable t) {
+            log(Log.WARN, TAG, "Build.TAGS spoof failed (non-fatal)", t);
+        }
     }
 
     private void hookKeyPairGeneratorInitialize(Class<?> delegateClass) {
@@ -198,7 +312,7 @@ public class ModuleMain extends XposedModule {
 
                 if (Config.MODE_CERT_GENERATE.equals(mode)) {
                     if (params.alias != null) chainByAlias.remove(params.alias);
-                    CertHack.Result r = CertHack.generateLeaf(params, registry);
+                    CertHack.Result r = CertHack.generateLeaf(params, registry, bootState);
                     if (r != null) {
                         if (params.alias != null) chainByAlias.put(params.alias, r.chain.clone());
                         log(Log.INFO, TAG, "cert_generate: synthesized chain for alias=" + params.alias
@@ -269,7 +383,7 @@ public class ModuleMain extends XposedModule {
 
                 if (Config.MODE_LEAF_HACK.equals(mode)) {
                     if (caList == null) return null;
-                    return CertHack.hackCertificateChain(caList, registry);
+                    return CertHack.hackCertificateChain(caList, registry, bootState);
                 }
                 return caList;
             });
@@ -293,8 +407,70 @@ public class ModuleMain extends XposedModule {
                     String.class, Certificate.class);
             hookAliasMutation(keyStoreSpi, "engineSetEntry",
                     String.class, KeyStore.Entry.class, KeyStore.ProtectionParameter.class);
+
+            // Hook engineGetEntry to return synthetic entries for cert_generate aliases
+            hookEngineGetEntry(keyStoreSpi);
+
+            // Hook isInsideSecureHardware on KeyInfo
+            hookKeyInfoSecureHardware(keyStoreSpi);
         } catch (Throwable t) {
             log(Log.ERROR, TAG, "engineGetCertificateChain hook failed", t);
+        }
+    }
+
+    private void hookEngineGetEntry(KeyStoreSpi keyStoreSpi) {
+        try {
+            Method m = findDeclaredMethod(keyStoreSpi.getClass(), "engineGetEntry",
+                    String.class, KeyStore.ProtectionParameter.class);
+            if (m == null) {
+                log(Log.WARN, TAG, "engineGetEntry not found");
+                return;
+            }
+            hook(m).intercept(chain -> {
+                String alias = (String) chain.getArg(0);
+                Certificate[] cached = alias != null ? chainByAlias.get(alias) : null;
+                if (cached != null && Config.MODE_CERT_GENERATE.equals(mode)) {
+                    // Return a synthetic PrivateKeyEntry for cert_generate mode
+                    try {
+                        KeyStore.PrivateKeyEntry entry = new KeyStore.PrivateKeyEntry(
+                                null, cached.clone());
+                        log(Log.INFO, TAG, "engineGetEntry: returning synthetic entry for alias=" + alias);
+                        return entry;
+                    } catch (Throwable t) {
+                        log(Log.WARN, TAG, "engineGetEntry synthetic failed", t);
+                    }
+                }
+                return chain.proceed();
+            });
+            log(Log.INFO, TAG, "hooked engineGetEntry");
+        } catch (Throwable t) {
+            log(Log.ERROR, TAG, "engineGetEntry hook failed", t);
+        }
+    }
+
+    private void hookKeyInfoSecureHardware(KeyStoreSpi keyStoreSpi) {
+        try {
+            // Hook engineGetKey to wrap KeyInfo results
+            Method m = findDeclaredMethod(keyStoreSpi.getClass(), "engineGetKey",
+                    String.class, char[].class);
+            if (m == null) {
+                log(Log.WARN, TAG, "engineGetKey not found");
+                return;
+            }
+            hook(m).intercept(chain -> {
+                Object result = chain.proceed();
+                String alias = (String) chain.getArg(0);
+                if (alias != null && chainByAlias.containsKey(alias)
+                        && result instanceof KeyInfo) {
+                    // The key was synthesized by us; wrap it to report secure hardware
+                    log(Log.INFO, TAG, "engineGetKey: wrapping KeyInfo for alias=" + alias);
+                    return SpoofedKeyInfo.wrap((KeyInfo) result);
+                }
+                return result;
+            });
+            log(Log.INFO, TAG, "hooked engineGetKey (isInsideSecureHardware)");
+        } catch (Throwable t) {
+            log(Log.ERROR, TAG, "engineGetKey hook failed", t);
         }
     }
 

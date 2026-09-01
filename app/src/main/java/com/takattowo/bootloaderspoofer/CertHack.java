@@ -81,7 +81,8 @@ final class CertHack {
     }
 
     /** Leaf-hack mode: rewrite RoT extension in real leaf, re-sign with keybox. */
-    static Certificate[] hackCertificateChain(Certificate[] caList, KeyboxRegistry registry) {
+    static Certificate[] hackCertificateChain(Certificate[] caList, KeyboxRegistry registry,
+                                              String bootState) {
         if (caList == null || caList.length == 0) return caList;
         try {
             X509Certificate leaf = (X509Certificate) CERT_FACTORY.generateCertificate(
@@ -111,7 +112,7 @@ final class CertHack {
                         Log.w(ModuleMain.TAG, "failed to extract original boot hash", t);
                     }
                     vector.add(new DERTaggedObject(true, 704,
-                            createRootOfTrust(attestationVersion, verifiedBootHash)));
+                            createRootOfTrust(attestationVersion, verifiedBootHash, bootState)));
                     replacedRootOfTrust = true;
                     continue;
                 }
@@ -159,7 +160,8 @@ final class CertHack {
     }
 
     /** Cert-generate mode: build new keypair + leaf entirely. Works on broken TEE. */
-    static Result generateLeaf(KeyGenParameters params, KeyboxRegistry registry) {
+    static Result generateLeaf(KeyGenParameters params, KeyboxRegistry registry,
+                               String bootState) {
         try {
             KeyboxRegistry.Entry k = registry.forAlgorithmInt(params.algorithm);
             if (k == null) {
@@ -192,7 +194,7 @@ final class CertHack {
             if (keyUsage != 0) {
                 certBuilder.addExtension(Extension.keyUsage, true, new KeyUsage(keyUsage));
             }
-            certBuilder.addExtension(createKeyDescriptionExtension(params));
+            certBuilder.addExtension(createKeyDescriptionExtension(params, bootState));
 
             ContentSigner signer = new JcaContentSignerBuilder(signatureAlgorithm(k.keyPair.getPrivate()))
                     .build(k.keyPair.getPrivate());
@@ -238,7 +240,8 @@ final class CertHack {
         return KeyPairGenerator.getInstance(algorithm);
     }
 
-    private static Extension createKeyDescriptionExtension(KeyGenParameters params) throws IOException {
+    private static Extension createKeyDescriptionExtension(KeyGenParameters params,
+                                                           String bootState) throws IOException {
         if (params.attestationChallenge == null) {
             throw new IllegalArgumentException("attestation challenge is required");
         }
@@ -279,7 +282,7 @@ final class CertHack {
         }
 
         tee.add(tag(702, new ASN1Integer(0)));
-        tee.add(tag(704, createRootOfTrust(attestationVersion, BootKey.getBootHash())));
+        tee.add(tag(704, createRootOfTrust(attestationVersion, BootKey.getBootHash(), bootState)));
         tee.add(tag(705, new ASN1Integer(BootKey.getOsVersion())));
         tee.add(tag(706, new ASN1Integer(BootKey.getPatchLevel())));
         if (attestationVersion >= 3) {
@@ -314,11 +317,13 @@ final class CertHack {
         return new DEROctetString(new DERSequence(keyDescriptionEncodables));
     }
 
-    private static ASN1Sequence createRootOfTrust(int attestationVersion, byte[] verifiedBootHash) {
+    private static ASN1Sequence createRootOfTrust(int attestationVersion, byte[] verifiedBootHash,
+                                                  String bootState) {
+        boolean unlocked = Config.BOOTSTATE_UNLOCKED.equals(bootState);
         ASN1EncodableVector values = new ASN1EncodableVector();
         values.add(new DEROctetString(BootKey.getBootKey()));
-        values.add(ASN1Boolean.TRUE);
-        values.add(new ASN1Enumerated(0));
+        values.add(ASN1Boolean.getInstance(!unlocked));
+        values.add(new ASN1Enumerated(unlocked ? 2 : 0));
         if (attestationVersion >= 3) values.add(new DEROctetString(verifiedBootHash));
         return new DERSequence(values);
     }
