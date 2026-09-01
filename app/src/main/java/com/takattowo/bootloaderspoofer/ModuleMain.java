@@ -32,6 +32,8 @@ public class ModuleMain extends XposedModule {
     private volatile KeyboxRegistry registry;
     private volatile String mode = Config.MODE_LEAF_HACK;
     private volatile String bootState = Config.BOOTSTATE_LOCKED;
+    private volatile String spoofScope = Config.SCOPE_SCOPED;
+    private volatile String zygiskMode = Config.ZYGISK_OFF;
     private volatile boolean loaded = false;
 
     private final Map<Object, KeyGenParameters> specByGenerator =
@@ -81,6 +83,17 @@ public class ModuleMain extends XposedModule {
             return;
         }
 
+        // In scoped mode, skip system_server and system framework processes
+        String pkg = param.getPackageName();
+        if (Config.SCOPE_SCOPED.equals(spoofScope)
+                && ("android".equals(pkg) || "system_server".equals(pkg)
+                    || pkg == null || pkg.startsWith("com.android.systemui"))) {
+            log(Log.INFO, TAG, "scoped mode: skipping " + pkg);
+            return;
+        }
+
+        log(Log.INFO, TAG, "hooking " + pkg + " (scope=" + spoofScope + ", zygisk=" + zygiskMode + ")");
+
         ClassLoader cl = param.getDefaultClassLoader();
         hookPackageManager(cl);
         hookSystemProperties(cl);
@@ -112,11 +125,14 @@ public class ModuleMain extends XposedModule {
         registry = r.registry;
         mode = Config.normalizeMode(RemoteFiles.read(this, Config.MODE_FILE));
         bootState = Config.normalizeBootState(RemoteFiles.read(this, Config.BOOTSTATE_FILE));
+        spoofScope = Config.normalizeSpoofScope(RemoteFiles.read(this, Config.SPOOFSCOPE_FILE));
+        zygiskMode = Config.normalizeZygiskMode(RemoteFiles.read(this, Config.ZYGISK_FILE));
         loaded = true;
         log(Log.INFO, TAG, "keybox source=" + r.source
                 + " (userEC=" + r.userEC + " userRSA=" + r.userRSA + ")"
                 + " EC expiry=" + r.ecExpiry + " RSA expiry=" + r.rsaExpiry
-                + " mode=" + mode + " bootState=" + bootState);
+                + " mode=" + mode + " bootState=" + bootState
+                + " scope=" + spoofScope + " zygisk=" + zygiskMode);
         if (r.ecExpired || r.rsaExpired) {
             log(Log.ERROR, TAG, "*** KEYBOX CHAIN EXPIRED *** Attestation will be rejected. "
                     + "Open the Bootloader Spoofer app and load a fresh keybox.xml.");

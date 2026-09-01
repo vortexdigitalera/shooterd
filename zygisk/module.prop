@@ -1,0 +1,7 @@
+id=bootloaderspoofer_zygisk
+name=Bootloader Spoofer Zygisk
+version=v1.0.0
+versionCode=1
+author=takattowo
+description=Zygisk companion module for Bootloader Spoofer. Provides native-level system property spoofing for bootloader state. Requires the Bootloader Spoofer LSPosed module to be installed for full functionality.
+updateJson=https://raw.githubusercontent.com/takattowo/BootloaderSpoofer/main/zygisk/update.json

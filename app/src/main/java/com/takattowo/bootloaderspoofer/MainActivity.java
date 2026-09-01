@@ -38,6 +38,12 @@ public class MainActivity extends AppCompatActivity implements App.ServiceStateL
     private LinearLayout rowBootstate;
     private TextView rowBootstateValue;
 
+    private LinearLayout rowSpoofscope;
+    private TextView rowSpoofscopeValue;
+
+    private LinearLayout rowZygisk;
+    private TextView rowZygiskValue;
+
     private View rowHideIcon;
     private MaterialSwitch hideIconSwitch;
     private TextView hideIconSubtitle;
@@ -66,6 +72,14 @@ public class MainActivity extends AppCompatActivity implements App.ServiceStateL
         rowBootstateValue = findViewById(R.id.row_bootstate_value);
         rowBootstate.setOnClickListener(v -> onBootstateTapped());
 
+        rowSpoofscope = findViewById(R.id.row_spoofscope);
+        rowSpoofscopeValue = findViewById(R.id.row_spoofscope_value);
+        rowSpoofscope.setOnClickListener(v -> onSpoofscopeTapped());
+
+        rowZygisk = findViewById(R.id.row_zygisk);
+        rowZygiskValue = findViewById(R.id.row_zygisk_value);
+        rowZygisk.setOnClickListener(v -> onZygiskTapped());
+
         rowHideIcon = findViewById(R.id.row_hide_icon);
         hideIconSwitch = findViewById(R.id.row_hide_icon_switch);
         hideIconSubtitle = findViewById(R.id.row_hide_icon_subtitle);
@@ -83,6 +97,12 @@ public class MainActivity extends AppCompatActivity implements App.ServiceStateL
                 getString(R.string.row_advanced_title),
                 getString(R.string.row_advanced_subtitle),
                 v -> startActivity(new Intent(this, AdvancedActivity.class)));
+
+        View rowUnlock = findViewById(R.id.row_unlock);
+        bindRow(rowUnlock, R.drawable.ic_shield,
+                getString(R.string.row_unlock_title),
+                getString(R.string.row_unlock_subtitle),
+                v -> startActivity(new Intent(this, UnlockHelperActivity.class)));
     }
 
     private void bindRow(View row, int iconRes, String title, String subtitle, View.OnClickListener onClick) {
@@ -124,6 +144,8 @@ public class MainActivity extends AppCompatActivity implements App.ServiceStateL
         updateStatusCard();
         updateModeRow();
         updateBootstateRow();
+        updateSpoofscopeRow();
+        updateZygiskRow();
     }
 
     private void updateStatusCard() {
@@ -198,6 +220,75 @@ public class MainActivity extends AppCompatActivity implements App.ServiceStateL
                 ? Config.BOOTSTATE_UNLOCKED : Config.BOOTSTATE_LOCKED;
         if (writeRemoteString(Config.BOOTSTATE_FILE, next)) {
             updateBootstateRow();
+            toast(getString(R.string.toast_restart_required));
+        }
+    }
+
+    // --- Spoof scope ---
+
+    private void updateSpoofscopeRow() {
+        String scope = currentSpoofScope();
+        rowSpoofscopeValue.setText(getString(
+                Config.SCOPE_GLOBAL.equals(scope)
+                        ? R.string.spoofscope_global
+                        : R.string.spoofscope_scoped));
+    }
+
+    private String currentSpoofScope() {
+        if (service == null) return Config.SCOPE_SCOPED;
+        return Config.normalizeSpoofScope(readRemoteString(Config.SPOOFSCOPE_FILE));
+    }
+
+    private void onSpoofscopeTapped() {
+        if (service == null) { toast(getString(R.string.toast_not_connected)); return; }
+        String current = currentSpoofScope();
+        if (Config.SCOPE_SCOPED.equals(current)) {
+            new MaterialAlertDialogBuilder(this)
+                    .setTitle(R.string.row_spoofscope_title)
+                    .setMessage(R.string.spoofscope_global_warn)
+                    .setPositiveButton(R.string.spoofscope_global, (d, w) -> {
+                        writeRemoteString(Config.SPOOFSCOPE_FILE, Config.SCOPE_GLOBAL);
+                        updateSpoofscopeRow();
+                        toast(getString(R.string.toast_restart_required));
+                    })
+                    .setNegativeButton(R.string.confirm_cancel, null)
+                    .show();
+        } else {
+            writeRemoteString(Config.SPOOFSCOPE_FILE, Config.SCOPE_SCOPED);
+            updateSpoofscopeRow();
+            toast(getString(R.string.toast_restart_required));
+        }
+    }
+
+    // --- Zygisk mode ---
+
+    private void updateZygiskRow() {
+        String zygisk = currentZygiskMode();
+        int res;
+        switch (zygisk) {
+            case Config.ZYGISK_PASSIVE: res = R.string.zygisk_passive; break;
+            case Config.ZYGISK_ACTIVE:  res = R.string.zygisk_active; break;
+            default:                   res = R.string.zygisk_off; break;
+        }
+        rowZygiskValue.setText(getString(res));
+    }
+
+    private String currentZygiskMode() {
+        if (service == null) return Config.ZYGISK_OFF;
+        return Config.normalizeZygiskMode(readRemoteString(Config.ZYGISK_FILE));
+    }
+
+    private void onZygiskTapped() {
+        if (service == null) { toast(getString(R.string.toast_not_connected)); return; }
+        String current = currentZygiskMode();
+        String next;
+        switch (current) {
+            case Config.ZYGISK_OFF:      next = Config.ZYGISK_PASSIVE; break;
+            case Config.ZYGISK_PASSIVE:  next = Config.ZYGISK_ACTIVE; break;
+            default:                    next = Config.ZYGISK_OFF; break;
+        }
+        if (writeRemoteString(Config.ZYGISK_FILE, next)) {
+            updateZygiskRow();
             toast(getString(R.string.toast_restart_required));
         }
     }

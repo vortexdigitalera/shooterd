@@ -75,5 +75,11 @@
             android:label="@string/edit_keybox_title"
             android:parentActivityName=".AdvancedActivity"
             android:windowSoftInputMode="adjustResize"/>
+
+        <activity
+            android:name=".UnlockHelperActivity"
+            android:exported="false"
+            android:label="@string/unlock_helper_title"
+            android:parentActivityName=".MainActivity"/>
     </application>
 </manifest>

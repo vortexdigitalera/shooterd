@@ -1,0 +1,6 @@
+{
+  "version": "v1.0.0",
+  "versionCode": 1,
+  "zipUrl": "https://github.com/takattowo/BootloaderSpoofer/releases/latest/download/bootloaderspoofer-zygisk.zip",
+  "changelog": "Initial Zygisk companion module release"
+}

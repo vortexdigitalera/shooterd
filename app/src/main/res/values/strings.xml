@@ -30,6 +30,41 @@
     <string name="bootstate_locked">Locked (verified boot green)</string>
     <string name="bootstate_unlocked">Unlocked (verified boot orange)</string>
 
+    <string name="row_spoofscope_title">Spoof scope</string>
+    <string name="spoofscope_scoped">Scoped apps only</string>
+    <string name="spoofscope_global">Global (all processes)</string>
+    <string name="spoofscope_global_warn">Global mode hooks all processes including system framework. This may cause instability or Play Integrity failures. Use with caution.</string>
+
+    <string name="row_zygisk_title">Zygisk mode</string>
+    <string name="zygisk_off">Off (LSPosed only)</string>
+    <string name="zygisk_passive">Passive (Zygisk loaded, LSPosed hooks)</string>
+    <string name="zygisk_active">Active (native property spoofing)</string>
+    <string name="zygisk_not_installed">Zygisk module not installed</string>
+
+    <string name="row_unlock_title">Bootloader unlock helper</string>
+    <string name="row_unlock_subtitle">Check status and guide for real unlock</string>
+
+    <!-- Unlock helper -->
+    <string name="unlock_helper_title">Bootloader Unlock</string>
+    <string name="unlock_helper_warning">This helper guides you through the legitimate OEM bootloader unlock process. Unlocking your bootloader will wipe all data and may void your warranty on some devices.</string>
+    <string name="unlock_section_status">Status</string>
+    <string name="unlock_section_guide">Guide</string>
+    <string name="unlock_oem_status_title">OEM unlock status</string>
+    <string name="unlock_oem_enabled">OEM unlocking is enabled</string>
+    <string name="unlock_oem_disabled">OEM unlocking is disabled</string>
+    <string name="unlock_oem_unknown">Unable to determine</string>
+    <string name="unlock_guide_title">Unlock guide</string>
+    <string name="unlock_guide_subtitle">Step-by-step instructions</string>
+    <string name="unlock_guide_body">1. Enable Developer Options (Settings → About → tap Build Number 7 times)\n\n2. Enable OEM Unlocking in Developer Options\n\n3. Enable USB Debugging\n\n4. Connect phone to PC with ADB\n\n5. Run: adb reboot bootloader\n\n6. Once in bootloader mode, run: fastboot flashing unlock\n\n7. Follow on-screen instructions on your device\n\n8. Device will wipe and reboot\n\nNote: This will erase ALL data on your device.</string>
+    <string name="unlock_fastboot_title">Fastboot commands</string>
+    <string name="unlock_fastboot_subtitle">Commands to run from PC</string>
+    <string name="unlock_fastboot_body">After enabling OEM unlocking and booting to bootloader:\n\nCheck unlock status:\n  fastboot oem device-info\n\nUnlock bootloader:\n  fastboot flashing unlock\n\nFor older devices:\n  fastboot oem unlock\n\nRe-lock bootloader:\n  fastboot flashing lock\n\nWarning: Re-locking with modified system may brick your device.</string>
+    <string name="unlock_reboot_title">Reboot to bootloader</string>
+    <string name="unlock_reboot_subtitle">Requires root (Magisk)</string>
+    <string name="unlock_reboot_confirm">Reboot to bootloader now? Make sure you have ADB access from a PC.</string>
+    <string name="unlock_reboot_btn">Reboot</string>
+    <string name="unlock_reboot_manual">Could not reboot automatically. Use: adb reboot bootloader</string>
+
     <string name="row_pick_title">Load keybox file</string>
     <string name="row_pick_subtitle">Pick a keybox.xml from device storage</string>
     <string name="row_edit_title">Edit keybox</string>
