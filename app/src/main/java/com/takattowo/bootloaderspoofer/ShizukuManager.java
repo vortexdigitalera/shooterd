@@ -364,45 +364,64 @@ final class ShizukuManager {
 
     /**
      * Execute a shell command with arguments via Shizuku.
+     * Reads stdout and stderr concurrently using separate threads to avoid
+     * deadlocks when the process fills the OS pipe buffer.
      */
     static String executeShell(String[] cmd) {
         try {
             Process process = newProcess(cmd);
             if (process == null) return null;
 
-            StringBuilder output = new StringBuilder();
+            StringBuilder stdout = new StringBuilder();
+            StringBuilder stderr = new StringBuilder();
+
+            // Read stdout and stderr in parallel to prevent pipe-buffer deadlock
+            Thread errThread = new Thread(() -> {
+                try (BufferedReader reader = new BufferedReader(
+                        new InputStreamReader(process.getErrorStream()))) {
+                    String line;
+                    while ((line = reader.readLine()) != null) {
+                        stderr.append(line).append("\n");
+                    }
+                } catch (Throwable ignored) {}
+            }, "shizuku-stderr");
+            errThread.setDaemon(true);
+            errThread.start();
+
             try (BufferedReader reader = new BufferedReader(
                     new InputStreamReader(process.getInputStream()))) {
                 String line;
                 while ((line = reader.readLine()) != null) {
-                    output.append(line).append("\n");
-                }
-            }
-
-            try (BufferedReader reader = new BufferedReader(
-                    new InputStreamReader(process.getErrorStream()))) {
-                String line;
-                while ((line = reader.readLine()) != null) {
-                    output.append(line).append("\n");
+                    stdout.append(line).append("\n");
                 }
             }
 
             process.waitFor();
-            return output.toString().trim();
+            errThread.join(2000);
+
+            if (stderr.length() > 0) stdout.append(stderr);
+            return stdout.toString().trim();
         } catch (Throwable t) {
             Log.w(TAG, "executeShell failed", t);
             return null;
         }
     }
 
+    private static volatile Method cachedNewProcess;
+
     /**
      * Call Shizuku.newProcess() via reflection (it's package-private in the stock API).
+     * The Method is cached after first successful lookup to avoid repeated reflection.
      */
     private static Process newProcess(String[] cmd) {
         try {
-            Method m = Shizuku.class.getDeclaredMethod("newProcess",
-                    String[].class, String[].class, String.class);
-            m.setAccessible(true);
+            Method m = cachedNewProcess;
+            if (m == null) {
+                m = Shizuku.class.getDeclaredMethod("newProcess",
+                        String[].class, String[].class, String.class);
+                m.setAccessible(true);
+                cachedNewProcess = m;
+            }
             return (Process) m.invoke(null, cmd, null, null);
         } catch (Throwable t) {
             Log.w(TAG, "newProcess reflection failed", t);

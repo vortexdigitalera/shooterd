@@ -150,7 +150,8 @@ public class SystemTweaksActivity extends AppCompatActivity {
             return;
         }
 
-        // Add section headers and tweak rows
+        // Add section headers and tweak rows first (with switches disabled),
+        // then fetch states asynchronously to avoid blocking the UI thread
         addSectionHeader(R.string.tweaks_section_bootloader);
         addTweakRow(ShizukuManager.TWEAKS.get("oem_unlock"));
         addTweakRow(ShizukuManager.TWEAKS.get("oem_unlock_samsung"));
@@ -174,6 +175,9 @@ public class SystemTweaksActivity extends AppCompatActivity {
         addTweakRow(ShizukuManager.TWEAKS.get("samsung_usb_config"));
         addTweakRow(ShizukuManager.TWEAKS.get("verified_boot_state"));
         addTweakRow(ShizukuManager.TWEAKS.get("flash_locked"));
+
+        // Fetch toggle states asynchronously
+        refreshTweakStates();
     }
 
     private void addSectionHeader(int textRes) {
@@ -195,9 +199,11 @@ public class SystemTweaksActivity extends AppCompatActivity {
         title.setText(tweak.title);
         desc.setText(tweak.description);
 
-        boolean enabled = ShizukuManager.isTweakEnabled(tweak);
-        toggle.setChecked(enabled);
+        // Start unchecked; state will be refreshed asynchronously
+        toggle.setChecked(false);
         toggle.setEnabled(ShizukuManager.isConnected());
+        // Tag the row with the tweak key so we can find it later
+        row.setTag(tweak.key);
 
         toggle.setOnCheckedChangeListener((button, isChecked) -> {
             boolean success = isChecked
@@ -212,6 +218,37 @@ public class SystemTweaksActivity extends AppCompatActivity {
         });
 
         tweaksContainer.addView(row);
+    }
+
+    /** Asynchronously fetch and update toggle states for all tweak rows. */
+    private void refreshTweakStates() {
+        new Thread(() -> {
+            for (int i = 0; i < tweaksContainer.getChildCount(); i++) {
+                View child = tweaksContainer.getChildAt(i);
+                if (child.getTag() instanceof String key) {
+                    ShizukuManager.Tweak tweak = ShizukuManager.TWEAKS.get(key);
+                    if (tweak == null) continue;
+                    boolean enabled = ShizukuManager.isTweakEnabled(tweak);
+                    runOnUiThread(() -> {
+                        Switch toggle = child.findViewById(R.id.tweak_switch);
+                        toggle.setOnCheckedChangeListener(null);
+                        toggle.setChecked(enabled);
+                        // Re-attach listener
+                        toggle.setOnCheckedChangeListener((button, isChecked) -> {
+                            boolean success = isChecked
+                                    ? ShizukuManager.enableTweak(tweak)
+                                    : ShizukuManager.disableTweak(tweak);
+                            if (success) {
+                                toast(tweak.title + ": " + (isChecked ? "ON" : "OFF"));
+                            } else {
+                                toast(tweak.title + ": failed");
+                                toggle.setChecked(!isChecked);
+                            }
+                        });
+                    });
+                }
+            }
+        }, "tweak-states").start();
     }
 
     private void showSamsungStatus() {

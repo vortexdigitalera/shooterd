@@ -155,18 +155,21 @@ public class MiniProotActivity extends Activity {
                     installHint.setVisibility(View.GONE);
                 }
 
-                switchAllowAll.setOnCheckedChangeListener(null);
-                switchAllowAll.setChecked(allowAll);
-                switchAllowAll.setOnCheckedChangeListener((buttonView, isChecked) -> {
-                    executor.execute(() -> {
-                        if (isChecked) {
-                            MiniProotManager.setAllowAll();
-                        } else {
-                            MiniProotManager.setWhitelist(new ArrayList<>());
-                        }
-                        mainHandler.post(this::loadApps);
+                // Only update switch if state actually changed to avoid redundant listener churn
+                if (switchAllowAll.isChecked() != allowAll) {
+                    switchAllowAll.setOnCheckedChangeListener(null);
+                    switchAllowAll.setChecked(allowAll);
+                    switchAllowAll.setOnCheckedChangeListener((buttonView, isChecked) -> {
+                        executor.execute(() -> {
+                            if (isChecked) {
+                                MiniProotManager.setAllowAll();
+                            } else {
+                                MiniProotManager.setWhitelist(new ArrayList<>());
+                            }
+                            mainHandler.post(this::loadApps);
+                        });
                     });
-                });
+                }
             });
         });
     }

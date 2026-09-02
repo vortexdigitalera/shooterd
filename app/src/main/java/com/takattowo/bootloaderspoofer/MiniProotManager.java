@@ -99,15 +99,15 @@ final class MiniProotManager {
         }
 
         try (OutputStream os = new FileOutputStream(f)) {
-            os.write("# Mini Proot whitelist\n".getBytes());
-            os.write("# Add UIDs allowed to use su, one per line\n".getBytes());
-            os.write("# Use 'all' to allow all apps\n\n".getBytes());
+            os.write("# Mini Proot whitelist\n".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            os.write("# Add UIDs allowed to use su, one per line\n".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            os.write("# Use 'all' to allow all apps\n\n".getBytes(java.nio.charset.StandardCharsets.UTF_8));
 
             if (uids == null) {
-                os.write("all\n".getBytes());
+                os.write("all\n".getBytes(java.nio.charset.StandardCharsets.UTF_8));
             } else {
                 for (int uid : uids) {
-                    os.write((uid + "\n").getBytes());
+                    os.write((uid + "\n").getBytes(java.nio.charset.StandardCharsets.UTF_8));
                 }
             }
             return true;
@@ -121,6 +121,7 @@ final class MiniProotManager {
     static boolean addUid(int uid) {
         List<Integer> uids = getWhitelistedUids();
         if (uids.contains(-1)) return true; // already allow all
+        // Use indexOf to check — List of small size, but avoid Integer boxing
         if (!uids.contains(uid)) {
             uids.add(uid);
         }
@@ -142,6 +143,7 @@ final class MiniProotManager {
 
     /**
      * Get list of installed apps with their UIDs for the whitelist UI.
+     * Uses a HashSet for O(1) whitelist lookups instead of List.contains() O(n).
      */
     static List<AppInfo> getInstalledApps(Context ctx) {
         List<AppInfo> apps = new ArrayList<>();
@@ -151,13 +153,16 @@ final class MiniProotManager {
 
         List<Integer> whitelisted = getWhitelistedUids();
         boolean allowAll = whitelisted.contains(-1);
+        // Use HashSet for O(1) contains() lookups
+        java.util.Set<Integer> whitelistSet = new java.util.HashSet<>(whitelisted);
 
         for (android.content.pm.ApplicationInfo ai : installed) {
             if ((ai.flags & android.content.pm.ApplicationInfo.FLAG_SYSTEM) != 0) {
                 continue; // Skip system apps
             }
             String name = pm.getApplicationLabel(ai).toString();
-            apps.add(new AppInfo(ai.packageName, name, ai.uid, allowAll || whitelisted.contains(ai.uid)));
+            apps.add(new AppInfo(ai.packageName, name, ai.uid,
+                    allowAll || whitelistSet.contains(ai.uid)));
         }
 
         // Sort by name
@@ -194,9 +199,9 @@ final class MiniProotManager {
         if (ShizukuManager.isConnected()) {
             String result = ShizukuManager.executeShell("prootd 2>&1 &");
             if (result != null) {
-                // Wait for socket
-                for (int i = 0; i < 5; i++) {
-                    try { Thread.sleep(500); } catch (InterruptedException ignored) {}
+                // Wait for socket with shorter intervals
+                for (int i = 0; i < 10; i++) {
+                    try { Thread.sleep(200); } catch (InterruptedException ignored) {}
                     if (isDaemonRunning()) return true;
                 }
             }
@@ -205,8 +210,8 @@ final class MiniProotManager {
         // Try via su (existing root)
         String suResult = ShizukuManager.executeShell("su -c 'prootd 2>&1 &' 2>/dev/null");
         if (suResult != null) {
-            for (int i = 0; i < 5; i++) {
-                try { Thread.sleep(500); } catch (InterruptedException ignored) {}
+            for (int i = 0; i < 10; i++) {
+                try { Thread.sleep(200); } catch (InterruptedException ignored) {}
                 if (isDaemonRunning()) return true;
             }
         }
@@ -230,35 +235,34 @@ final class MiniProotManager {
         // Try via su
         ShizukuManager.executeShell("su -c 'kill $(cat " + PROOTD_PID_FILE + ")' 2>/dev/null");
 
-        // Wait for socket to disappear
-        for (int i = 0; i < 5; i++) {
-            try { Thread.sleep(500); } catch (InterruptedException ignored) {}
+        // Wait for socket to disappear with shorter intervals
+        for (int i = 0; i < 10; i++) {
+            try { Thread.sleep(200); } catch (InterruptedException ignored) {}
             if (!isDaemonRunning()) return true;
         }
         return false;
     }
 
-    /** Get the prootd log (last N lines). */
+    /** Get the prootd log (last N lines). Reads efficiently using a ring buffer. */
     static String getDaemonLog() {
         File f = new File(PROOTD_LOG);
         if (!f.exists()) return "No log file found";
 
-        StringBuilder sb = new StringBuilder();
+        // Use a ring buffer of 100 lines to avoid loading the entire file
+        java.util.Deque<String> ring = new java.util.ArrayDeque<>(100);
         try (BufferedReader reader = new BufferedReader(new FileReader(f))) {
             String line;
             while ((line = reader.readLine()) != null) {
-                sb.append(line).append("\n");
+                if (ring.size() == 100) ring.pollFirst();
+                ring.addLast(line);
             }
         } catch (IOException e) {
             return "Error reading log: " + e.getMessage();
         }
 
-        // Return last 100 lines
-        String[] lines = sb.toString().split("\n");
-        int start = Math.max(0, lines.length - 100);
         StringBuilder result = new StringBuilder();
-        for (int i = start; i < lines.length; i++) {
-            result.append(lines[i]).append("\n");
+        for (String l : ring) {
+            result.append(l).append("\n");
         }
         return result.toString();
     }

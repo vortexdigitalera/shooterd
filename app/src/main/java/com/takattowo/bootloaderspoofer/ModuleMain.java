@@ -35,6 +35,7 @@ public class ModuleMain extends XposedModule {
     private volatile String spoofScope = Config.SCOPE_SCOPED;
     private volatile String zygiskMode = Config.ZYGISK_OFF;
     private volatile boolean loaded = false;
+    private volatile Class<?> cachedKeyPairGeneratorClass = null;
 
     private final Map<Object, KeyGenParameters> specByGenerator =
             Collections.synchronizedMap(new WeakHashMap<>());
@@ -125,9 +126,11 @@ public class ModuleMain extends XposedModule {
     }
 
     private Class<?> probeKeyPairGeneratorClass() {
+        if (cachedKeyPairGeneratorClass != null) return cachedKeyPairGeneratorClass;
         for (String algo : new String[]{"EC", "RSA"}) {
             try {
-                return KeyPairGenerator.getInstance(algo).getClass();
+                cachedKeyPairGeneratorClass = KeyPairGenerator.getInstance(algo).getClass();
+                return cachedKeyPairGeneratorClass;
             } catch (Throwable ignored) {
             }
         }

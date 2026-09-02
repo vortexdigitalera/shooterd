@@ -146,9 +146,6 @@ public class DebugInfoActivity extends AppCompatActivity {
             "ro.build.tags",
             "sys.oem_unlock_allowed",
             "ro.oem_unlock_supported",
-            "ro.boot.flash.locked",
-            "ro.boot.verifiedbootstate",
-            "ro.boot.warranty_bit",
         };
 
         for (String key : keys) {

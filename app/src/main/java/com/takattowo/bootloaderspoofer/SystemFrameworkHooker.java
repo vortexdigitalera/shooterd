@@ -50,7 +50,6 @@ final class SystemFrameworkHooker {
         m.put("sys.oem_unlock_allowed", "1");
         m.put("ro.boot.veritymode", "enforcing");
         m.put("ro.boot.vbmeta.hash_alg", "sha256");
-        m.put("ro.boot.verifiedbootstate", "orange");
         PROPS_UNLOCKED = Collections.unmodifiableMap(m);
     }
 

@@ -265,8 +265,11 @@ final class KeyboxLoader {
 
     private static String normalizePem(String value) {
         if (value == null) return "";
-        String[] lines = value.trim().split("\\r?\\n");
-        StringBuilder normalized = new StringBuilder();
+        String trimmed = value.trim();
+        // Fast path: if no carriage returns, the value is already normalized
+        if (trimmed.indexOf('\r') < 0) return trimmed;
+        String[] lines = trimmed.split("\\r?\\n");
+        StringBuilder normalized = new StringBuilder(trimmed.length());
         for (String line : lines) {
             if (normalized.length() > 0) normalized.append('\n');
             normalized.append(line.trim());

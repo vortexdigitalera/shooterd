@@ -4,6 +4,7 @@ import android.content.ComponentName;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.os.Bundle;
+import android.os.SystemClock;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.widget.ImageView;
@@ -52,6 +53,8 @@ public class MainActivity extends AppCompatActivity implements App.ServiceStateL
     private View rowAdvanced;
 
     private volatile XposedService service;
+    private volatile String cachedKeyboxLabel = null;
+    private volatile long keyboxLabelTimestamp = 0;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -197,15 +200,24 @@ public class MainActivity extends AppCompatActivity implements App.ServiceStateL
     }
 
     private String keyboxSourceLabel() {
+        // Cache for 5 seconds to avoid re-parsing XML on every UI refresh
+        long now = SystemClock.elapsedRealtime();
+        if (cachedKeyboxLabel != null && (now - keyboxLabelTimestamp) < 5000) {
+            return cachedKeyboxLabel;
+        }
         String xml = readRemoteString(Config.KEYBOX_FILE);
+        String label;
         try {
             KeyboxLoader.Result r = KeyboxLoader.loadFromXmlOrBundled(xml);
             String source = r.userEC && r.userRSA ? "user"
                     : r.userEC || r.userRSA ? "user + bundled" : "bundled (AOSP)";
-            return r.ecExpired || r.rsaExpired ? source + " (expired)" : source;
+            label = r.ecExpired || r.rsaExpired ? source + " (expired)" : source;
         } catch (Throwable ignored) {
+            label = "bundled (AOSP)";
         }
-        return "bundled (AOSP)";
+        cachedKeyboxLabel = label;
+        keyboxLabelTimestamp = now;
+        return label;
     }
 
     private void updateModeRow() {
@@ -294,15 +306,19 @@ public class MainActivity extends AppCompatActivity implements App.ServiceStateL
             case Config.ZYGISK_ACTIVE:  res = R.string.zygisk_active; break;
             default:                   res = R.string.zygisk_off; break;
         }
-        // Append detected Zygisk implementation
-        ZygiskDetector.DetectionResult detection = ZygiskDetector.detect(this);
-        String detected = "";
-        if (detection.hasZygisk()) {
-            detected = " [" + detection.zygisk.label + "]";
-        } else if (detection.hasRoot()) {
-            detected = " [root: " + detection.root.label + ", no Zygisk]";
-        }
-        rowZygiskValue.setText(getString(res) + detected);
+        rowZygiskValue.setText(getString(res));
+        // Detect Zygisk implementation asynchronously to avoid blocking UI
+        new Thread(() -> {
+            ZygiskDetector.DetectionResult detection = ZygiskDetector.detect(this);
+            String detected = "";
+            if (detection.hasZygisk()) {
+                detected = " [" + detection.zygisk.label + "]";
+            } else if (detection.hasRoot()) {
+                detected = " [root: " + detection.root.label + ", no Zygisk]";
+            }
+            final String suffix = detected;
+            runOnUiThread(() -> rowZygiskValue.setText(getString(res) + suffix));
+        }, "zygisk-detect").start();
     }
 
     private String currentZygiskMode() {
