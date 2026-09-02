@@ -13,13 +13,13 @@ val keystoreProperties = Properties().apply {
 
 android {
     namespace = "com.takattowo.bootloaderspoofer"
-    compileSdk = 36
-    buildToolsVersion = "36.1.0"
+    compileSdk = 37
+    buildToolsVersion = "37.0.0"
 
     defaultConfig {
         applicationId = "com.takattowo.bootloaderspoofer"
         minSdk = 26
-        targetSdk = 36
+        targetSdk = 37
         versionCode = 1
         versionName = "1.0.0"
     }
