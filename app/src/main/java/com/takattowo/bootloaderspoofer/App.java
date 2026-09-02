@@ -33,6 +33,7 @@ public class App extends Application implements XposedServiceHelper.OnServiceLis
     public void onCreate() {
         super.onCreate();
         XposedServiceHelper.registerListener(this);
+        ShizukuManager.init();
     }
 
     @Override

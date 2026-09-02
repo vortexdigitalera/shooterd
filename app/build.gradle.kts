@@ -58,6 +58,10 @@ android {
         targetCompatibility = JavaVersion.VERSION_21
     }
 
+    buildFeatures {
+        aidl = true
+    }
+
     packaging {
         resources {
             merges += "META-INF/xposed/*"
@@ -83,6 +87,7 @@ dependencies {
     implementation(libs.libxposed.service)
     implementation(libs.bouncycastle.bcpkix)
     implementation(libs.androidx.appcompat)
+    implementation(libs.androidx.annotation)
     implementation(libs.material)
     testImplementation("junit:junit:4.13.2")
 }

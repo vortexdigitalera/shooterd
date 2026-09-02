@@ -103,6 +103,12 @@ public class MainActivity extends AppCompatActivity implements App.ServiceStateL
                 getString(R.string.row_unlock_title),
                 getString(R.string.row_unlock_subtitle),
                 v -> startActivity(new Intent(this, UnlockHelperActivity.class)));
+
+        View rowTweaks = findViewById(R.id.row_tweaks);
+        bindRow(rowTweaks, R.drawable.ic_tune,
+                getString(R.string.row_tweaks_title),
+                getString(R.string.row_tweaks_subtitle),
+                v -> startActivity(new Intent(this, SystemTweaksActivity.class)));
     }
 
     private void bindRow(View row, int iconRes, String title, String subtitle, View.OnClickListener onClick) {

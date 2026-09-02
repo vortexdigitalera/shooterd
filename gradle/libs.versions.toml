@@ -5,6 +5,7 @@ xposed-service = "101.0.0"
 bouncycastle = "1.85"
 material = "1.13.0"
 appcompat = "1.7.0"
+annotation = "1.3.0"
 
 [plugins]
 agp-app = { id = "com.android.application", version.ref = "agp" }
@@ -15,3 +16,4 @@ libxposed-service = { group = "io.github.libxposed", name = "service", version.r
 bouncycastle-bcpkix = { group = "org.bouncycastle", name = "bcpkix-jdk18on", version.ref = "bouncycastle" }
 material = { group = "com.google.android.material", name = "material", version.ref = "material" }
 androidx-appcompat = { group = "androidx.appcompat", name = "appcompat", version.ref = "appcompat" }
+androidx-annotation = { group = "androidx.annotation", name = "annotation", version.ref = "annotation" }

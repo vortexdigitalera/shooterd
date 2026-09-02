@@ -81,5 +81,11 @@
             android:exported="false"
             android:label="@string/unlock_helper_title"
             android:parentActivityName=".MainActivity"/>
+
+        <activity
+            android:name=".SystemTweaksActivity"
+            android:exported="false"
+            android:label="@string/system_tweaks_title"
+            android:parentActivityName=".MainActivity"/>
     </application>
 </manifest>
