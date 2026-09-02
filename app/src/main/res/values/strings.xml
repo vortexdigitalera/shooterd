@@ -207,4 +207,17 @@
     <string name="framework_hooker_desc">Global system_server hooks for system-wide property spoofing. Active when spoof scope is set to Global.</string>
     <string name="framework_hooker_active">Active (global scope)</string>
     <string name="framework_hooker_inactive">Inactive (scoped mode)</string>
+
+    <!-- Debug info -->
+    <string name="debug_info_title">Debug Info</string>
+    <string name="row_debug_title">Debug info</string>
+    <string name="row_debug_subtitle">System properties, kernel, attestation tests</string>
+    <string name="debug_device_info">Device Info</string>
+    <string name="debug_bootloader_props">Bootloader Properties</string>
+    <string name="debug_kernel_info">Kernel Info</string>
+    <string name="debug_oem_info">OEM Settings</string>
+    <string name="debug_root_detection">Root &amp; Zygisk</string>
+    <string name="debug_attestation_test">Attestation Test</string>
+    <string name="debug_all_props">System Properties (filtered)</string>
+    <string name="debug_no_props">No properties found (connect Shizuku for shell access)</string>
 </resources>

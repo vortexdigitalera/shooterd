@@ -110,6 +110,12 @@ public class ModuleMain extends XposedModule {
         hookSystemProperties(cl);
         hookBuildTags();
 
+        // Hook developer settings to force-show OEM unlocking toggle
+        // even when hidden by carrier/OEM restrictions
+        if ("com.android.settings".equals(pkg)) {
+            hookOemUnlockToggle(cl);
+        }
+
         Class<?> delegateClass = probeKeyPairGeneratorClass();
         if (delegateClass != null) {
             hookKeyPairGeneratorInitialize(delegateClass);
@@ -232,6 +238,106 @@ public class ModuleMain extends XposedModule {
             log(Log.INFO, TAG, "hooked SystemProperties (" + props.size() + " props, bootState=" + bootState + ")");
         } catch (Throwable t) {
             log(Log.ERROR, TAG, "SystemProperties hook failed", t);
+        }
+    }
+
+    // --- OEM Unlock toggle force-show ---
+
+    private void hookOemUnlockToggle(ClassLoader cl) {
+        try {
+            // Hook DevelopmentSettingsDashboardFragment to force-enable OEM unlocking toggle
+            // The Settings app hides the OEM unlocking toggle when:
+            //   1. ro.boot.flash.locked = 1 (locked bootloader) AND carrier restricts it
+            //   2. ro.oem_unlock_supported = 0
+            //   3. PackageManager doesn't have the feature
+            // We hook the methods that check these conditions to always return true
+
+            // Hook OemUnlockPreferenceController to force-show
+            Class<?> devSettingsClass;
+            try {
+                devSettingsClass = Class.forName(
+                    "com.android.settings.development.OemUnlockPreferenceController", false, cl);
+            } catch (ClassNotFoundException e) {
+                try {
+                    devSettingsClass = Class.forName(
+                        "com.android.settings.development.DevelopmentSettingsDashboardFragment", false, cl);
+                } catch (ClassNotFoundException e2) {
+                    log(Log.WARN, TAG, "OemUnlock class not found, trying alternative");
+                    return;
+                }
+            }
+
+            // Hook isAvailable() to return true
+            Method isAvailable = findDeclaredMethod(devSettingsClass, "isAvailable");
+            if (isAvailable != null) {
+                hook(isAvailable).intercept(chain -> true);
+                log(Log.INFO, TAG, "hooked OemUnlockPreferenceController.isAvailable -> true");
+            }
+
+            // Hook isChecked() to reflect the actual setting
+            Method isChecked = findDeclaredMethod(devSettingsClass, "isChecked");
+            if (isChecked != null) {
+                hook(isChecked).intercept(chain -> {
+                    try {
+                        android.content.Context ctx = (android.content.Context)
+                            cl.loadClass("android.app.ActivityThread")
+                                .getMethod("currentApplication").invoke(null);
+                        if (ctx != null) {
+                            return android.provider.Settings.Global.getInt(
+                                ctx.getContentResolver(), "oem_unlock_enabled", 0) == 1;
+                        }
+                    } catch (Throwable t) {
+                        return chain.proceed();
+                    }
+                    return chain.proceed();
+                });
+            }
+
+            // Hook setChecked() to actually write the setting
+            Method setChecked = findDeclaredMethod(devSettingsClass, "setChecked", boolean.class);
+            if (setChecked != null) {
+                hook(setChecked).intercept(chain -> {
+                    boolean val = (boolean) chain.getArg(0);
+                    try {
+                        android.content.Context ctx = (android.content.Context)
+                            cl.loadClass("android.app.ActivityThread")
+                                .getMethod("currentApplication").invoke(null);
+                        if (ctx != null) {
+                            android.provider.Settings.Global.putInt(
+                                ctx.getContentResolver(), "oem_unlock_enabled", val ? 1 : 0);
+                        }
+                    } catch (Throwable t) {
+                        log(Log.WARN, TAG, "OemUnlock setChecked write failed", t);
+                    }
+                    return true;
+                });
+                log(Log.INFO, TAG, "hooked OemUnlockPreferenceController.setChecked");
+            }
+        } catch (Throwable t) {
+            log(Log.ERROR, TAG, "OemUnlock hook failed", t);
+        }
+
+        // Also hook the generic preference controller availability check
+        try {
+            Class<?> prefControllerClass;
+            try {
+                prefControllerClass = Class.forName(
+                    "com.android.settingslib.development.DevelopmentSettingsEnabler", false, cl);
+            } catch (ClassNotFoundException e) {
+                prefControllerClass = null;
+            }
+
+            if (prefControllerClass != null) {
+                Method isDevelopmentSettingsEnabled =
+                    findDeclaredMethod(prefControllerClass, "isDevelopmentSettingsEnabled",
+                        android.content.Context.class);
+                if (isDevelopmentSettingsEnabled != null) {
+                    hook(isDevelopmentSettingsEnabled).intercept(chain -> true);
+                    log(Log.INFO, TAG, "hooked DevelopmentSettingsEnabler.isDevelopmentSettingsEnabled -> true");
+                }
+            }
+        } catch (Throwable t) {
+            log(Log.WARN, TAG, "DevelopmentSettingsEnabler hook failed (non-fatal)", t);
         }
     }
 

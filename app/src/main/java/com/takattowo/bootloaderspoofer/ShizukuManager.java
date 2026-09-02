@@ -5,6 +5,7 @@ import android.content.pm.PackageManager;
 import android.util.Log;
 
 import rikka.shizuku.Shizuku;
+import rikka.shizuku.ShizukuProvider;
 
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
@@ -194,6 +195,9 @@ final class ShizukuManager {
     static boolean isBinderAlive() {
         try {
             return Shizuku.pingBinder();
+        } catch (IllegalStateException e) {
+            // Binder not received yet — try to request it
+            return false;
         } catch (Throwable t) {
             return false;
         }
@@ -210,15 +214,41 @@ final class ShizukuManager {
         }
     }
 
-    /** Check if Shizuku is running (binder alive) — does NOT require permission. */
+    /**
+     * Check if Shizuku is running (binder alive) — does NOT require permission.
+     * Uses pingBinder() directly, which checks the actual binder state
+     * regardless of whether our listener has fired yet.
+     */
     static boolean isRunning() {
+        // Try pingBinder directly — this works even if our sticky listener
+        // hasn't fired yet (e.g. binder was delivered to the provider before
+        // we registered the listener)
+        try {
+            if (Shizuku.pingBinder()) return true;
+        } catch (Throwable ignored) {
+        }
+        // Also check our flag as fallback
         return binderReceived && isBinderAlive();
+    }
+
+    /**
+     * Try to actively request the binder from the Shizuku provider.
+     * This is needed when the binder was delivered to the provider process
+     * before our listener was registered.
+     */
+    static void requestBinder(Context ctx) {
+        try {
+            ShizukuProvider.requestBinderForNonProviderProcess(ctx);
+        } catch (Throwable t) {
+            Log.w(TAG, "requestBinder failed", t);
+        }
     }
 
     /** Check if Shizuku is running and has permission. */
     static boolean isConnected() {
         try {
-            if (!binderReceived || !Shizuku.pingBinder()) return false;
+            // Use pingBinder directly — works even if listener hasn't fired
+            if (!Shizuku.pingBinder()) return false;
             return checkPermission();
         } catch (Throwable t) {
             return false;
@@ -228,7 +258,7 @@ final class ShizukuManager {
     /** Check if we have Shizuku permission. Returns false if binder not ready. */
     static boolean checkPermission() {
         try {
-            if (!binderReceived || !Shizuku.pingBinder()) return false;
+            if (!Shizuku.pingBinder()) return false;
             return Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED;
         } catch (IllegalStateException e) {
             // Binder not received yet

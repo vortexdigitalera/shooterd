@@ -34,6 +34,9 @@ public class App extends Application implements XposedServiceHelper.OnServiceLis
         super.onCreate();
         XposedServiceHelper.registerListener(this);
         ShizukuManager.init();
+        // Request binder early — the provider may have already received it
+        // but our listener hasn't been registered yet
+        ShizukuManager.requestBinder(this);
     }
 
     @Override

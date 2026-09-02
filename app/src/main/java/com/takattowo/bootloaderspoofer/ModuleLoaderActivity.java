@@ -126,6 +126,8 @@ public class ModuleLoaderActivity extends AppCompatActivity {
     @Override
     protected void onResume() {
         super.onResume();
+        // Actively request binder in case it wasn't delivered to our process
+        ShizukuManager.requestBinder(this);
         updateShizukuStatus();
         if (ShizukuManager.isConnected()) {
             loadModules();
@@ -156,17 +158,20 @@ public class ModuleLoaderActivity extends AppCompatActivity {
                 shizukuConnectRow.setVisibility(View.VISIBLE);
                 shizukuConnectRow.setOnClickListener(v -> {
                     try {
-                        startActivity(new Intent("moe.shizuku.manager.intent.ACTION_START_SHIZUKU"));
-                    } catch (Throwable t) {
-                        try {
-                            Intent launch = getPackageManager().getLaunchIntentForPackage("moe.shizuku.privileged.api");
-                            if (launch != null) startActivity(launch);
-                            else toast("Shizuku not installed");
-                        } catch (Throwable t2) {
-                            toast("Cannot open Shizuku");
-                        }
+                        Intent launch = getPackageManager().getLaunchIntentForPackage("moe.shizuku.privileged.api");
+                        if (launch != null) startActivity(launch);
+                        else toast("Shizuku not installed");
+                    } catch (Throwable t2) {
+                        toast("Cannot open Shizuku");
                     }
                 });
+                // Re-check after a delay — binder may arrive asynchronously
+                getWindow().getDecorView().postDelayed(() -> {
+                    if (ShizukuManager.isRunning()) {
+                        updateShizukuStatus();
+                        if (ShizukuManager.isConnected()) loadModules();
+                    }
+                }, 2000);
             } else {
                 shizukuStatus.setText(R.string.shizuku_not_granted);
                 shizukuConnectRow.setVisibility(View.VISIBLE);

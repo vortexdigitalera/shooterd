@@ -96,6 +96,7 @@ final class SystemFrameworkHooker {
         hookSystemServer(cl);
         hookVbmetaVerifier(cl);
         hookVerifiedBootReporter(cl);
+        hookOemUnlockSupported(cl);
 
         module.log(Log.INFO, TAG, "Framework hooks installed (" + props.size() + " properties)");
     }
@@ -324,6 +325,67 @@ final class SystemFrameworkHooker {
             }
         } catch (Throwable t) {
             module.log(Log.DEBUG, TAG, "VerifiedBootReporter hook skipped (non-fatal)");
+        }
+    }
+
+    // --- OEM Unlock support hook (system_server level) ---
+
+    private void hookOemUnlockSupported(ClassLoader cl) {
+        try {
+            // Hook PersistentDataBlockManager to report OEM unlock as supported
+            // The Settings app checks if OEM unlock is allowed via the
+            // PersistentDataBlockService, which reads ro.boot.flash.locked
+            // and ro.oem_unlock_supported
+            Class<?> pdbmClass;
+            try {
+                pdbmClass = Class.forName("android.service.persistentdata.PersistentDataBlockManager", false, cl);
+            } catch (ClassNotFoundException e) {
+                return; // Not available
+            }
+
+            // Hook getOemUnlockEnabled() to return the global setting
+            Method getOemUnlock = findMethod(pdbmClass, "getOemUnlockEnabled");
+            if (getOemUnlock != null) {
+                xposed.hook(getOemUnlock).intercept(chain -> {
+                    try {
+                        android.content.Context ctx = (android.content.Context)
+                            pdbmClass.getClassLoader().loadClass("android.app.ActivityThread")
+                                .getMethod("currentApplication").invoke(null);
+                        if (ctx != null) {
+                            return android.provider.Settings.Global.getInt(
+                                ctx.getContentResolver(), "oem_unlock_enabled", 0) == 1;
+                        }
+                    } catch (Throwable t) {
+                        // Fallback: return true to allow OEM unlock
+                        return true;
+                    }
+                    return chain.proceed();
+                });
+                module.log(Log.INFO, TAG, "hooked PersistentDataBlockManager.getOemUnlockEnabled");
+            }
+
+            // Hook setOemUnlockEnabled() to write the setting
+            Method setOemUnlock = findMethod(pdbmClass, "setOemUnlockEnabled", boolean.class);
+            if (setOemUnlock != null) {
+                xposed.hook(setOemUnlock).intercept(chain -> {
+                    boolean val = (boolean) chain.getArg(0);
+                    try {
+                        android.content.Context ctx = (android.content.Context)
+                            pdbmClass.getClassLoader().loadClass("android.app.ActivityThread")
+                                .getMethod("currentApplication").invoke(null);
+                        if (ctx != null) {
+                            android.provider.Settings.Global.putInt(
+                                ctx.getContentResolver(), "oem_unlock_enabled", val ? 1 : 0);
+                        }
+                    } catch (Throwable t) {
+                        module.log(Log.WARN, TAG, "setOemUnlockEnabled write failed", t);
+                    }
+                    return null;
+                });
+                module.log(Log.INFO, TAG, "hooked PersistentDataBlockManager.setOemUnlockEnabled");
+            }
+        } catch (Throwable t) {
+            module.log(Log.DEBUG, TAG, "OemUnlockSupported hook skipped (non-fatal)");
         }
     }
 
