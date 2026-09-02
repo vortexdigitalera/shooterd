@@ -1,0 +1,7 @@
+id=bootloaderspoofer_miniproot
+name=Bootloader Spoofer Mini Proot
+version=v1.0.0
+versionCode=1
+author=takattowo
+description=Built-in Mini Proot root provider for Bootloader Spoofer. Provides su/root access to apps that require root privileges, acting as a lightweight alternative to Magisk/APatch/KernelSU su. Works alongside existing root solutions or standalone via Zygisk injection.
+updateJson=https://raw.githubusercontent.com/takattowo/BootloaderSpoofer/main/miniproot/update.json

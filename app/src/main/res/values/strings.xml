@@ -220,4 +220,25 @@
     <string name="debug_attestation_test">Attestation Test</string>
     <string name="debug_all_props">System Properties (filtered)</string>
     <string name="debug_no_props">No properties found (connect Shizuku for shell access)</string>
+
+    <!-- Mini Proot -->
+    <string name="miniproot_title">Mini Proot</string>
+    <string name="row_miniproot_title">Mini Proot</string>
+    <string name="row_miniproot_subtitle">Built-in root provider (su replacement)</string>
+    <string name="miniproot_status_label">Daemon Status</string>
+    <string name="miniproot_running">prootd is running</string>
+    <string name="miniproot_stopped">prootd is not running</string>
+    <string name="miniproot_not_installed">Mini Proot not installed</string>
+    <string name="miniproot_start">Start Daemon</string>
+    <string name="miniproot_stop">Stop Daemon</string>
+    <string name="miniproot_test">Test Root Access</string>
+    <string name="miniproot_whitelist">App Whitelist</string>
+    <string name="miniproot_whitelist_desc">Select apps allowed to use root</string>
+    <string name="miniproot_allow_all">Allow All Apps</string>
+    <string name="miniproot_allow_all_desc">Grant root to all apps (not recommended)</string>
+    <string name="miniproot_view_log">View Daemon Log</string>
+    <string name="miniproot_install_hint">Install the Mini Proot module from GitHub releases to enable built-in root access</string>
+    <string name="miniproot_test_result">Root Test Result</string>
+    <string name="miniproot_no_apps">No user apps found</string>
+    <string name="miniproot_search_hint">Search apps…</string>
 </resources>

@@ -121,6 +121,12 @@ public class MainActivity extends AppCompatActivity implements App.ServiceStateL
                 getString(R.string.row_debug_title),
                 getString(R.string.row_debug_subtitle),
                 v -> startActivity(new Intent(this, DebugInfoActivity.class)));
+
+        View rowMiniProot = findViewById(R.id.row_miniproot);
+        bindRow(rowMiniProot, R.drawable.ic_shield,
+                getString(R.string.row_miniproot_title),
+                getString(R.string.row_miniproot_subtitle),
+                v -> startActivity(new Intent(this, MiniProotActivity.class)));
     }
 
     private void bindRow(View row, int iconRes, String title, String subtitle, View.OnClickListener onClick) {

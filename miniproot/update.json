@@ -1,0 +1,6 @@
+{
+    "version": "v1.0.0",
+    "versionCode": 1,
+    "zipUrl": "https://raw.githubusercontent.com/takattowo/BootloaderSpoofer/main/miniproot/miniproot.zip",
+    "changelog": "Initial release of Mini Proot - built-in root provider"
+}
