@@ -121,6 +121,12 @@
             android:label="@string/privilege_title"
             android:parentActivityName=".MainActivity"/>
 
+        <activity
+            android:name=".GblExploitActivity"
+            android:exported="false"
+            android:label="@string/gbl_title"
+            android:parentActivityName=".MainActivity"/>
+
         <!-- Shizuku provider for receiving binder from Shizuku server -->
         <provider
             android:name="rikka.shizuku.ShizukuProvider"

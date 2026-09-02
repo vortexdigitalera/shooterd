@@ -291,4 +291,49 @@
     <string name="privilege_loading_status">Loading status…</string>
     <string name="privilege_refresh_status">Refresh Status</string>
     <string name="privilege_injecting">Injecting payload via Zygote…</string>
+
+    <!-- Qualcomm GBL Exploit -->
+    <string name="gbl_title">Qualcomm GBL Exploit</string>
+    <string name="row_gbl_title">GBL Exploit</string>
+    <string name="row_gbl_subtitle">Hardware bootloader unlock via GBL EFI injection</string>
+    <string name="gbl_warning">⚠ DANGER: This flashes an unsigned UEFI app to the efisp partition to overwrite the device lock state in RPMB. This can brick your device if done incorrectly. A backup is created automatically. Proceed at your own risk.</string>
+
+    <!-- Status -->
+    <string name="gbl_section_status">Device Status</string>
+    <string name="gbl_checking">Checking device compatibility…</string>
+    <string name="gbl_check_status">Check Status</string>
+
+    <!-- Actions -->
+    <string name="gbl_section_actions">Exploit Actions</string>
+    <string name="gbl_flash_unlock">Flash Unlock EFI</string>
+    <string name="gbl_flash_relock">Flash Relock EFI</string>
+    <string name="gbl_restore_backup">Restore Original Backup</string>
+    <string name="gbl_reboot">Reboot Device</string>
+
+    <!-- Info -->
+    <string name="gbl_section_info">Information</string>
+    <string name="gbl_info_text">Qualcomm GBL (Generic Boot Loader) is an unsigned UEFI stage loaded from the efisp partition. By replacing it with a custom EFI app that calls QCOM_VERIFIEDBOOT_PROTOCOL.VBRwDeviceState(WRITE_CONFIG), we can overwrite the device lock state stored in RPMB — achieving a real hardware-level bootloader unlock.\n\nSource: kasnria001/qualcomm_gbl_exploit_poc</string>
+
+    <!-- Confirmations -->
+    <string name="gbl_flash_unlock_confirm">This will:\n\n1. Back up the original efisp partition to /data/local/tmp/\n2. Flash the unlock EFI to efisp\n3. You must reboot to apply\n\nThe EFI calls VBRwDeviceState(WRITE_CONFIG) to set the unlock state in RPMB.\n\nProceed?</string>
+    <string name="gbl_flash_relock_confirm">This will flash the relock EFI to efisp, restoring the locked state in RPMB.\n\nProceed?</string>
+    <string name="gbl_restore_confirm">This will restore the original efisp partition from the backup at /data/local/tmp/gbl_efisp_backup.img.\n\nProceed?</string>
+    <string name="gbl_reboot_confirm">Reboot the device now? The GBL exploit will take effect on reboot.</string>
+    <string name="gbl_flash_proceed">Flash</string>
+    <string name="gbl_reboot_now">Reboot Now</string>
+    <string name="gbl_reboot_later">Later</string>
+
+    <!-- Progress -->
+    <string name="gbl_flashing_unlock">Flashing unlock EFI to efisp…</string>
+    <string name="gbl_flashing_relock">Flashing relock EFI to efisp…</string>
+    <string name="gbl_restoring">Restoring original efisp partition…</string>
+    <string name="gbl_rebooting">Rebooting…</string>
+
+    <!-- Results -->
+    <string name="gbl_unlock_done">Unlock EFI Flashed</string>
+    <string name="gbl_unlock_reboot_prompt">The unlock EFI has been flashed to the efisp partition. Reboot now to apply the exploit. The device lock state in RPMB will be overwritten on boot.</string>
+    <string name="gbl_relock_done">Relock EFI Flashed</string>
+    <string name="gbl_relock_reboot_prompt">The relock EFI has been flashed. Reboot now to restore the locked state.</string>
+    <string name="gbl_check_first">Check device status first.</string>
+    <string name="gbl_not_exploitable">Device is not exploitable. Check status for details.</string>
 </resources>

@@ -136,6 +136,12 @@ public class MainActivity extends AppCompatActivity implements App.ServiceStateL
                 getString(R.string.row_privilege_title),
                 getString(R.string.row_privilege_subtitle),
                 v -> startActivity(new Intent(this, PrivilegeActivity.class)));
+
+        View rowGbl = findViewById(R.id.row_gbl);
+        bindRow(rowGbl, R.drawable.ic_bug,
+                getString(R.string.row_gbl_title),
+                getString(R.string.row_gbl_subtitle),
+                v -> startActivity(new Intent(this, GblExploitActivity.class)));
     }
 
     private void bindRow(View row, int iconRes, String title, String subtitle, View.OnClickListener onClick) {
