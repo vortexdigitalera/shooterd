@@ -30,8 +30,59 @@
             <TextView
                 style="@style/ScreenTitle"
                 android:layout_marginStart="8dp"
+                android:layout_weight="1"
                 android:text="@string/module_loader_title"/>
+
+            <ImageButton
+                android:id="@+id/btn_refresh"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:src="@drawable/ic_tune"
+                android:contentDescription="@null"
+                android:rotation="180"/>
         </LinearLayout>
+
+        <!-- Search bar -->
+        <com.google.android.material.card.MaterialCardView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginHorizontal="16dp"
+            app:cardBackgroundColor="@color/surface"
+            app:cardCornerRadius="12dp"
+            app:cardElevation="0dp"
+            app:strokeWidth="0dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:paddingHorizontal="12dp"
+                android:paddingVertical="4dp">
+
+                <ImageView
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
+                    android:src="@drawable/ic_search"
+                    android:contentDescription="@null"/>
+
+                <EditText
+                    android:id="@+id/search_input"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:layout_marginStart="8dp"
+                    android:hint="@string/modules_search_hint"
+                    android:inputType="text"
+                    android:imeOptions="actionSearch"
+                    android:background="@android:color/transparent"
+                    android:textColor="@color/text_primary"
+                    android:textColorHint="@color/text_tertiary"
+                    android:textSize="14sp"
+                    android:maxLines="1"/>
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
 
         <!-- Shizuku status card -->
         <com.google.android.material.card.MaterialCardView

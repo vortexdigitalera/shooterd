@@ -18,4 +18,14 @@
     <color name="icon_tint">#CFCFCF</color>
     <color name="accent">#5BB6F5</color>
     <color name="divider">#26FFFFFF</color>
+
+    <!-- Module source badges -->
+    <color name="badge_magisk_bg">#3A5A1A</color>
+    <color name="badge_magisk_text">#8BC34A</color>
+    <color name="badge_xposed_bg">#3A1A5A</color>
+    <color name="badge_xposed_text">#CE93D8</color>
+    <color name="badge_state_remove_bg">#5A1A1A</color>
+    <color name="badge_state_remove_text">#EF9A9A</color>
+    <color name="badge_state_update_bg">#5A4A1A</color>
+    <color name="badge_state_update_text">#FFE082</color>
 </resources>
