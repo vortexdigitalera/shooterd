@@ -83,8 +83,19 @@ public class ModuleMain extends XposedModule {
             return;
         }
 
-        // In scoped mode, skip system_server and system framework processes
         String pkg = param.getPackageName();
+
+        // In global scope, hook system_server and framework processes
+        // with the SystemFrameworkHooker for system-wide spoofing
+        if (Config.SCOPE_GLOBAL.equals(spoofScope)
+                && ("android".equals(pkg) || "system_server".equals(pkg))) {
+            log(Log.INFO, TAG, "global scope: installing framework hooks in " + pkg);
+            SystemFrameworkHooker hooker = new SystemFrameworkHooker(this, this, bootState);
+            hooker.installFrameworkHooks(param.getDefaultClassLoader());
+            // Also install the regular app hooks for key attestation
+        }
+
+        // In scoped mode, skip system_server and system framework processes
         if (Config.SCOPE_SCOPED.equals(spoofScope)
                 && ("android".equals(pkg) || "system_server".equals(pkg)
                     || pkg == null || pkg.startsWith("com.android.systemui"))) {

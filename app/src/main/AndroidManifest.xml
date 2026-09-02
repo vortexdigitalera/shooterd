@@ -7,6 +7,12 @@
             <action android:name="android.intent.action.VIEW"/>
             <data android:scheme="https"/>
         </intent>
+        <!-- Allow querying Shizuku package -->
+        <package android:name="moe.shizuku.privileged.api"/>
+        <!-- Allow starting Shizuku service -->
+        <intent>
+            <action android:name="moe.shizuku.manager.intent.ACTION_START_SHIZUKU"/>
+        </intent>
     </queries>
 
     <!-- Shizuku permission for API access -->

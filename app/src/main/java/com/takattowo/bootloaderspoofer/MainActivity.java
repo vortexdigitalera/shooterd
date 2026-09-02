@@ -282,7 +282,15 @@ public class MainActivity extends AppCompatActivity implements App.ServiceStateL
             case Config.ZYGISK_ACTIVE:  res = R.string.zygisk_active; break;
             default:                   res = R.string.zygisk_off; break;
         }
-        rowZygiskValue.setText(getString(res));
+        // Append detected Zygisk implementation
+        ZygiskDetector.DetectionResult detection = ZygiskDetector.detect(this);
+        String detected = "";
+        if (detection.hasZygisk()) {
+            detected = " [" + detection.zygisk.label + "]";
+        } else if (detection.hasRoot()) {
+            detected = " [root: " + detection.root.label + ", no Zygisk]";
+        }
+        rowZygiskValue.setText(getString(res) + detected);
     }
 
     private String currentZygiskMode() {

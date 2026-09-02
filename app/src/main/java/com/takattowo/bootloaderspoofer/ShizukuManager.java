@@ -25,6 +25,21 @@ final class ShizukuManager {
     private static final String SHIZUKU_PACKAGE = "moe.shizuku.privileged.api";
 
     private static volatile boolean initialized = false;
+    private static volatile boolean binderReceived = false;
+
+    /** Listener for binder state changes (used by UI to refresh). */
+    public interface BinderStateListener {
+        void onBinderStateChanged(boolean available);
+    }
+
+    private static final java.util.List<BinderStateListener> binderListeners = new java.util.concurrent.CopyOnWriteArrayList<>();
+
+    static void addBinderStateListener(BinderStateListener l) { binderListeners.add(l); }
+    static void removeBinderStateListener(BinderStateListener l) { binderListeners.remove(l); }
+
+    private static void notifyBinderListeners(boolean available) {
+        for (BinderStateListener l : binderListeners) l.onBinderStateChanged(available);
+    }
 
     /** A system tweak that can be toggled via Shizuku shell. */
     static final class Tweak {
@@ -159,12 +174,28 @@ final class ShizukuManager {
                 // Sui not available, that's fine
             }
 
-            Shizuku.addBinderReceivedListenerSticky(() ->
-                    Log.i(TAG, "Shizuku binder received"));
-            Shizuku.addBinderDeadListener(() ->
-                    Log.w(TAG, "Shizuku binder died"));
+            // Track binder state with sticky listeners so UI can react
+            Shizuku.addBinderReceivedListenerSticky(() -> {
+                Log.i(TAG, "Shizuku binder received");
+                binderReceived = true;
+                notifyBinderListeners(true);
+            });
+            Shizuku.addBinderDeadListener(() -> {
+                Log.w(TAG, "Shizuku binder died");
+                binderReceived = false;
+                notifyBinderListeners(false);
+            });
         } catch (Throwable t) {
             Log.w(TAG, "Shizuku init failed (not installed?)", t);
+        }
+    }
+
+    /** Check if Shizuku binder is alive (server is running). */
+    static boolean isBinderAlive() {
+        try {
+            return Shizuku.pingBinder();
+        } catch (Throwable t) {
+            return false;
         }
     }
 
@@ -179,29 +210,62 @@ final class ShizukuManager {
         }
     }
 
+    /** Check if Shizuku is running (binder alive) — does NOT require permission. */
+    static boolean isRunning() {
+        return binderReceived && isBinderAlive();
+    }
+
     /** Check if Shizuku is running and has permission. */
     static boolean isConnected() {
         try {
-            return Shizuku.pingBinder() && checkPermission();
+            if (!binderReceived || !Shizuku.pingBinder()) return false;
+            return checkPermission();
         } catch (Throwable t) {
             return false;
         }
     }
 
-    /** Check if we have Shizuku permission. */
+    /** Check if we have Shizuku permission. Returns false if binder not ready. */
     static boolean checkPermission() {
         try {
-            if (Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED) return true;
+            if (!binderReceived || !Shizuku.pingBinder()) return false;
+            return Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED;
+        } catch (IllegalStateException e) {
+            // Binder not received yet
+            Log.w(TAG, "checkPermission: binder not received", e);
+            return false;
         } catch (Throwable t) {
             Log.w(TAG, "checkPermission failed", t);
+            return false;
         }
-        return false;
     }
 
-    /** Request Shizuku permission. */
+    /**
+     * Request Shizuku permission. Safe to call — checks binder first.
+     * If binder is not received, the request is deferred until binder arrives.
+     */
     static void requestPermission() {
+        if (!binderReceived || !isBinderAlive()) {
+            Log.w(TAG, "requestPermission: binder not ready, will retry when binder received");
+            // Register a one-shot listener to request permission when binder arrives
+            Shizuku.OnBinderReceivedListener retryListener = new Shizuku.OnBinderReceivedListener() {
+                @Override
+                public void onBinderReceived() {
+                    Shizuku.removeBinderReceivedListener(this);
+                    try {
+                        Shizuku.requestPermission(0);
+                    } catch (Throwable t) {
+                        Log.w(TAG, "deferred requestPermission failed", t);
+                    }
+                }
+            };
+            Shizuku.addBinderReceivedListenerSticky(retryListener);
+            return;
+        }
         try {
             Shizuku.requestPermission(0);
+        } catch (IllegalStateException e) {
+            Log.w(TAG, "requestPermission: binder not received", e);
         } catch (Throwable t) {
             Log.w(TAG, "requestPermission failed", t);
         }

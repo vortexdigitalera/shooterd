@@ -110,6 +110,10 @@ public class ModuleLoaderActivity extends AppCompatActivity {
 
         ShizukuManager.init();
         Shizuku.addRequestPermissionResultListener(permissionListener);
+        ShizukuManager.addBinderStateListener(available -> runOnUiThread(() -> {
+            updateShizukuStatus();
+            if (available) loadModules();
+        }));
         updateShizukuStatus();
     }
 
@@ -146,12 +150,31 @@ public class ModuleLoaderActivity extends AppCompatActivity {
                 }
             });
         } else if (!connected) {
-            shizukuStatus.setText(R.string.shizuku_not_connected);
-            shizukuConnectRow.setVisibility(View.VISIBLE);
-            shizukuConnectRow.setOnClickListener(v -> {
-                ShizukuManager.requestPermission();
-                toast(getString(R.string.shizuku_requesting_permission));
-            });
+            boolean running = ShizukuManager.isRunning();
+            if (!running) {
+                shizukuStatus.setText(R.string.shizuku_not_running);
+                shizukuConnectRow.setVisibility(View.VISIBLE);
+                shizukuConnectRow.setOnClickListener(v -> {
+                    try {
+                        startActivity(new Intent("moe.shizuku.manager.intent.ACTION_START_SHIZUKU"));
+                    } catch (Throwable t) {
+                        try {
+                            Intent launch = getPackageManager().getLaunchIntentForPackage("moe.shizuku.privileged.api");
+                            if (launch != null) startActivity(launch);
+                            else toast("Shizuku not installed");
+                        } catch (Throwable t2) {
+                            toast("Cannot open Shizuku");
+                        }
+                    }
+                });
+            } else {
+                shizukuStatus.setText(R.string.shizuku_not_granted);
+                shizukuConnectRow.setVisibility(View.VISIBLE);
+                shizukuConnectRow.setOnClickListener(v -> {
+                    ShizukuManager.requestPermission();
+                    toast(getString(R.string.shizuku_requesting_permission));
+                });
+            }
         } else {
             shizukuStatus.setText(R.string.shizuku_connected);
             shizukuConnectRow.setVisibility(View.GONE);

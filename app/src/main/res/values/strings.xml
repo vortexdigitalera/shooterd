@@ -71,6 +71,8 @@
     <string name="row_tweaks_subtitle">Hidden settings via Shizuku</string>
     <string name="shizuku_status_label">Shizuku status</string>
     <string name="shizuku_not_installed">Shizuku not installed</string>
+    <string name="shizuku_not_running">Not running — tap to open Shizuku</string>
+    <string name="shizuku_not_granted">Running — tap to grant permission</string>
     <string name="shizuku_not_connected">Shizuku not connected</string>
     <string name="shizuku_connected">Connected (standard Shizuku)</string>
     <string name="shizuku_connected_plus">Connected (Shizuku+ enhanced API)</string>
@@ -190,4 +192,19 @@
     <string name="module_scope_saved">Scope saved (reboot to apply)</string>
     <string name="module_scope_save_failed">Failed to save scope</string>
     <string name="module_settings_no_activity">This module has no settings activity</string>
+
+    <!-- Zygisk detection -->
+    <string name="zygisk_detect_title">Zygisk Detection</string>
+    <string name="zygisk_detect_no_root">No root framework detected</string>
+    <string name="zygisk_detect_no_zygisk">Root detected but no Zygisk available</string>
+    <string name="zygisk_detect_available">Zygisk available: %1$s</string>
+    <string name="zygisk_detect_module_installed">Our Zygisk module is installed</string>
+    <string name="zygisk_detect_module_not_installed">Our Zygisk module is NOT installed</string>
+    <string name="zygisk_detect_install_hint">Install the Zygisk module from the GitHub releases to enable native-level property spoofing</string>
+
+    <!-- Framework hooker -->
+    <string name="framework_hooker_title">System Framework Hooker</string>
+    <string name="framework_hooker_desc">Global system_server hooks for system-wide property spoofing. Active when spoof scope is set to Global.</string>
+    <string name="framework_hooker_active">Active (global scope)</string>
+    <string name="framework_hooker_inactive">Inactive (scoped mode)</string>
 </resources>
