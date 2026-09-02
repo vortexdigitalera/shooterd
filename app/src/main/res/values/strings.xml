@@ -134,4 +134,23 @@
     <string name="repo_url" translatable="false">https://github.com/takattowo/BootloaderSpoofer</string>
     <string name="repo_issues_url" translatable="false">https://github.com/takattowo/BootloaderSpoofer/issues/new</string>
     <string name="trickystore_url" translatable="false">https://github.com/5ec1cff/TrickyStore</string>
+
+    <!-- Module Loader -->
+    <string name="module_loader_title">Module Loader</string>
+    <string name="row_modules_title">Module loader</string>
+    <string name="row_modules_subtitle">Manage Magisk / KernelSU modules</string>
+    <string name="modules_loading">Scanning modules…</string>
+    <string name="modules_empty">No modules found in /data/adb/modules/</string>
+    <string name="modules_summary">%1$d modules · %2$d enabled</string>
+    <string name="module_author_label">by %1$s</string>
+    <string name="module_state_enabled">Enabled</string>
+    <string name="module_state_disabled">Disabled</string>
+    <string name="module_state_remove">Removal pending</string>
+    <string name="module_state_update">Update pending</string>
+    <string name="module_action_enable">Enable</string>
+    <string name="module_action_disable">Disable</string>
+    <string name="module_action_details">Details</string>
+    <string name="module_enabled_toast">enabled (reboot to apply)</string>
+    <string name="module_disabled_toast">disabled (reboot to apply)</string>
+    <string name="module_toggle_failed">Failed to toggle module</string>
 </resources>

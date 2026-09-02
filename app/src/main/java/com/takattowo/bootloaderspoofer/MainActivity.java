@@ -109,6 +109,12 @@ public class MainActivity extends AppCompatActivity implements App.ServiceStateL
                 getString(R.string.row_tweaks_title),
                 getString(R.string.row_tweaks_subtitle),
                 v -> startActivity(new Intent(this, SystemTweaksActivity.class)));
+
+        View rowModules = findViewById(R.id.row_modules);
+        bindRow(rowModules, R.drawable.ic_file,
+                getString(R.string.row_modules_title),
+                getString(R.string.row_modules_subtitle),
+                v -> startActivity(new Intent(this, ModuleLoaderActivity.class)));
     }
 
     private void bindRow(View row, int iconRes, String title, String subtitle, View.OnClickListener onClick) {

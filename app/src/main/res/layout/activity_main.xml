@@ -465,5 +465,20 @@
                 layout="@layout/row_item"/>
         </com.google.android.material.card.MaterialCardView>
 
+        <!-- Module loader section -->
+        <com.google.android.material.card.MaterialCardView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginHorizontal="16dp"
+            android:layout_marginTop="8dp"
+            app:cardBackgroundColor="@color/surface"
+            app:cardCornerRadius="20dp"
+            app:cardElevation="0dp">
+
+            <include
+                android:id="@+id/row_modules"
+                layout="@layout/row_item"/>
+        </com.google.android.material.card.MaterialCardView>
+
     </LinearLayout>
 </ScrollView>

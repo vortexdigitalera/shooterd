@@ -91,6 +91,12 @@
             android:label="@string/system_tweaks_title"
             android:parentActivityName=".MainActivity"/>
 
+        <activity
+            android:name=".ModuleLoaderActivity"
+            android:exported="false"
+            android:label="@string/module_loader_title"
+            android:parentActivityName=".MainActivity"/>
+
         <!-- Shizuku provider for receiving binder from Shizuku server -->
         <provider
             android:name="rikka.shizuku.ShizukuProvider"
