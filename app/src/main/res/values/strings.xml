@@ -241,4 +241,54 @@
     <string name="miniproot_test_result">Root Test Result</string>
     <string name="miniproot_no_apps">No user apps found</string>
     <string name="miniproot_search_hint">Search apps…</string>
+
+    <!-- Privilege Escalation (CVE-2024-31317) -->
+    <string name="privilege_title">Privilege Escalation</string>
+    <string name="row_privilege_title">Privilege Escalation</string>
+    <string name="row_privilege_subtitle">System-level OEM unlock via CVE-2024-31317</string>
+    <string name="privilege_warning">Uses CVE-2024-31317 (Zygote injection) to gain system-level privileges for manipulating ro.oem.* properties. Requires Shizuku. Use at your own risk.</string>
+
+    <!-- CVE Status -->
+    <string name="privilege_section_cve">Vulnerability Check</string>
+    <string name="privilege_checking">Checking…</string>
+    <string name="privilege_check_cve">Check Vulnerability</string>
+    <string name="privilege_cve_vulnerable">Vulnerable</string>
+    <string name="privilege_cve_vulnerable_desc">Device is vulnerable to CVE-2024-31317. Zygote injection is possible.</string>
+    <string name="privilege_cve_patched">Patched</string>
+    <string name="privilege_cve_patched_desc">Device is patched against CVE-2024-31317. This feature will not work.</string>
+
+    <!-- Shizuku Status -->
+    <string name="privilege_section_shizuku">Shizuku Status</string>
+    <string name="privilege_shizuku_checking">Checking Shizuku…</string>
+    <string name="privilege_shizuku_not_running">Shizuku is not running. Start Shizuku first.</string>
+    <string name="privilege_shizuku_no_permission">Shizuku running, but permission not granted.</string>
+    <string name="privilege_shizuku_ready">Shizuku ready with permission granted.</string>
+    <string name="privilege_request_permission">Request Permission</string>
+    <string name="privilege_permission_requested">Permission request sent. Check Shizuku app.</string>
+
+    <!-- OEM Unlock Actions -->
+    <string name="privilege_section_oem">OEM Unlock</string>
+    <string name="privilege_enable_oem_unlock">Enable OEM Unlock (System)</string>
+    <string name="privilege_disable_oem_unlock">Disable OEM Unlock (System)</string>
+    <string name="privilege_enable_confirm">This will inject a Zygote payload to set OEM unlock properties at the system level (UID 1000). This includes:\n\n• oem_unlock_enabled = 1\n• ro.oem_unlock_supported = 1\n• ro.boot.flash.locked = 0\n• ro.boot.verifiedbootstate = orange\n• persist.sys.oem_unlock_allowed = 1\n\nProceed?</string>
+    <string name="privilege_disable_confirm">This will inject a Zygote payload to disable OEM unlock at the system level. This re-locks the bootloader state.\n\nProceed?</string>
+    <string name="privilege_proceed">Proceed</string>
+    <string name="privilege_check_cve_first">Check CVE vulnerability first.</string>
+    <string name="privilege_not_vulnerable">Device is not vulnerable to CVE-2024-31317.</string>
+
+    <!-- Custom Property -->
+    <string name="privilege_section_custom">Custom Property</string>
+    <string name="privilege_prop_name_hint">Property name (e.g. ro.oem_unlock_supported)</string>
+    <string name="privilege_prop_value_hint">Property value (e.g. 1)</string>
+    <string name="privilege_set_prop">Set Property (System)</string>
+    <string name="privilege_prop_name_empty">Enter a property name</string>
+    <string name="privilege_prop_value_empty">Enter a property value</string>
+    <string name="privilege_setting_prop">Setting %1$s = %2$s…</string>
+
+    <!-- Status Output -->
+    <string name="privilege_section_status">Current Status</string>
+    <string name="privilege_no_output">No output yet. Tap refresh to load.</string>
+    <string name="privilege_loading_status">Loading status…</string>
+    <string name="privilege_refresh_status">Refresh Status</string>
+    <string name="privilege_injecting">Injecting payload via Zygote…</string>
 </resources>

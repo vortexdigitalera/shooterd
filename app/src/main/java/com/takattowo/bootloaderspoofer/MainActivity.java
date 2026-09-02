@@ -130,6 +130,12 @@ public class MainActivity extends AppCompatActivity implements App.ServiceStateL
                 getString(R.string.row_miniproot_title),
                 getString(R.string.row_miniproot_subtitle),
                 v -> startActivity(new Intent(this, MiniProotActivity.class)));
+
+        View rowPrivilege = findViewById(R.id.row_privilege);
+        bindRow(rowPrivilege, R.drawable.ic_gavel,
+                getString(R.string.row_privilege_title),
+                getString(R.string.row_privilege_subtitle),
+                v -> startActivity(new Intent(this, PrivilegeActivity.class)));
     }
 
     private void bindRow(View row, int iconRes, String title, String subtitle, View.OnClickListener onClick) {

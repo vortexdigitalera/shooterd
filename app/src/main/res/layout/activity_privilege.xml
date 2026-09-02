@@ -1,0 +1,265 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:fillViewport="true"
+    android:fitsSystemWindows="true">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:paddingBottom="32dp">
+
+        <!-- Header -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:padding="16dp">
+
+            <ImageButton
+                android:id="@+id/btn_back"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:src="@drawable/ic_arrow_back"
+                android:contentDescription="@null"/>
+
+            <TextView
+                style="@style/ScreenTitle"
+                android:layout_marginStart="8dp"
+                android:text="@string/privilege_title"/>
+        </LinearLayout>
+
+        <!-- Warning banner -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginHorizontal="20dp"
+            android:layout_marginTop="4dp"
+            android:text="@string/privilege_warning"
+            android:textColor="@color/text_secondary"
+            android:textSize="13sp"
+            android:lineSpacingExtra="2dp"/>
+
+        <!-- CVE Status Section -->
+        <TextView
+            style="@style/SectionHeader"
+            android:text="@string/privilege_section_cve"/>
+
+        <com.google.android.material.card.MaterialCardView
+            android:id="@+id/card_cve_status"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginHorizontal="16dp"
+            app:cardBackgroundColor="@color/surface"
+            app:cardCornerRadius="20dp"
+            app:cardElevation="0dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                <TextView
+                    android:id="@+id/tv_cve_status"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/privilege_checking"
+                    android:textSize="15sp"
+                    android:textColor="@color/text_primary"/>
+
+                <TextView
+                    android:id="@+id/tv_cve_details"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:textSize="13sp"
+                    android:textColor="@color/text_secondary"/>
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btn_check_cve"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:text="@string/privilege_check_cve"
+                    style="@style/Widget.Material3.Button.TonalButton"/>
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+        <!-- Shizuku Status Section -->
+        <TextView
+            style="@style/SectionHeader"
+            android:text="@string/privilege_section_shizuku"/>
+
+        <com.google.android.material.card.MaterialCardView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginHorizontal="16dp"
+            app:cardBackgroundColor="@color/surface"
+            app:cardCornerRadius="20dp"
+            app:cardElevation="0dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                <TextView
+                    android:id="@+id/tv_shizuku_status"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/privilege_shizuku_checking"
+                    android:textSize="15sp"
+                    android:textColor="@color/text_primary"/>
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btn_request_permission"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:text="@string/privilege_request_permission"
+                    style="@style/Widget.Material3.Button.TonalButton"/>
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+        <!-- OEM Unlock Actions -->
+        <TextView
+            style="@style/SectionHeader"
+            android:text="@string/privilege_section_oem"/>
+
+        <com.google.android.material.card.MaterialCardView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginHorizontal="16dp"
+            app:cardBackgroundColor="@color/surface"
+            app:cardCornerRadius="20dp"
+            app:cardElevation="0dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btn_enable_oem_unlock"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/privilege_enable_oem_unlock"
+                    style="@style/Widget.Material3.Button"/>
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btn_disable_oem_unlock"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:text="@string/privilege_disable_oem_unlock"
+                    style="@style/Widget.Material3.Button.OutlinedButton"/>
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+        <!-- Custom Property -->
+        <TextView
+            style="@style/SectionHeader"
+            android:text="@string/privilege_section_custom"/>
+
+        <com.google.android.material.card.MaterialCardView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginHorizontal="16dp"
+            app:cardBackgroundColor="@color/surface"
+            app:cardCornerRadius="20dp"
+            app:cardElevation="0dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                <com.google.android.material.textfield.TextInputLayout
+                    style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:hint="@string/privilege_prop_name_hint">
+
+                    <com.google.android.material.textfield.TextInputEditText
+                        android:id="@+id/et_prop_name"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:inputType="text"
+                        android:singleLine="true"/>
+                </com.google.android.material.textfield.TextInputLayout>
+
+                <com.google.android.material.textfield.TextInputLayout
+                    style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:hint="@string/privilege_prop_value_hint">
+
+                    <com.google.android.material.textfield.TextInputEditText
+                        android:id="@+id/et_prop_value"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:inputType="text"
+                        android:singleLine="true"/>
+                </com.google.android.material.textfield.TextInputLayout>
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btn_set_prop"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:text="@string/privilege_set_prop"
+                    style="@style/Widget.Material3.Button.TonalButton"/>
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+        <!-- Status Output -->
+        <TextView
+            style="@style/SectionHeader"
+            android:text="@string/privilege_section_status"/>
+
+        <com.google.android.material.card.MaterialCardView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginHorizontal="16dp"
+            app:cardBackgroundColor="@color/surface"
+            app:cardCornerRadius="20dp"
+            app:cardElevation="0dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                <TextView
+                    android:id="@+id/tv_status_output"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/privilege_no_output"
+                    android:textSize="13sp"
+                    android:textColor="@color/text_secondary"
+                    android:fontFamily="monospace"
+                    android:lineSpacingExtra="2dp"/>
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btn_refresh_status"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:text="@string/privilege_refresh_status"
+                    style="@style/Widget.Material3.Button.TextButton"/>
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+    </LinearLayout>
+</ScrollView>
