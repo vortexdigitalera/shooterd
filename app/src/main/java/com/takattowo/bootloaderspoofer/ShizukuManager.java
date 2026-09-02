@@ -2,20 +2,21 @@ package com.takattowo.bootloaderspoofer;
 
 import android.content.Context;
 import android.content.pm.PackageManager;
-import android.os.Build;
 import android.util.Log;
 
 import rikka.shizuku.Shizuku;
-import rikka.shizuku.ShizukuPlusAPI;
 
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+import java.lang.reflect.Method;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
- * Manages Shizuku/ShizukuPlus connection and provides high-level
- * methods for hidden system tweaks via elevated shell access.
+ * Manages Shizuku connection and provides high-level methods for
+ * hidden system tweaks via elevated shell access.
  *
- * Works with standard Shizuku, Sui, or ShizukuPlus servers.
+ * Uses the stock Shizuku-API from RikkaApps/Shizuku-API.
  * All shell commands run as uid 2000 (shell) — no root required.
  */
 final class ShizukuManager {
@@ -149,6 +150,15 @@ final class ShizukuManager {
         if (initialized) return;
         initialized = true;
         try {
+            // Initialize Sui if available (for root-based Shizuku)
+            try {
+                Class<?> suiClass = Class.forName("rikka.sui.Sui");
+                Method initMethod = suiClass.getMethod("init");
+                initMethod.invoke(null);
+            } catch (Throwable t) {
+                // Sui not available, that's fine
+            }
+
             Shizuku.addBinderReceivedListenerSticky(() ->
                     Log.i(TAG, "Shizuku binder received"));
             Shizuku.addBinderDeadListener(() ->
@@ -197,47 +207,72 @@ final class ShizukuManager {
         }
     }
 
-    /** Check if the enhanced ShizukuPlus API is available. */
-    static boolean isEnhancedApi() {
-        try {
-            return ShizukuPlusAPI.isEnhancedApiSupported();
-        } catch (Throwable t) {
-            return false;
-        }
+    /**
+     * Execute a shell command via Shizuku using the stock API.
+     * Uses reflection to access Shizuku.newProcess() which is package-private.
+     * Returns output or null on failure.
+     */
+    static String executeShell(String command) {
+        return executeShell(new String[]{"sh", "-c", command});
     }
 
-    /** Execute a shell command via Shizuku. Returns output or null on failure. */
-    static String executeShell(String command) {
+    /**
+     * Execute a shell command with arguments via Shizuku.
+     */
+    static String executeShell(String[] cmd) {
         try {
-            ShizukuPlusAPI.CommandResult result = ShizukuPlusAPI.executeShell(command);
-            if (result.isSuccess()) return result.output;
-            Log.w(TAG, "Shell command failed: " + command + " -> " + result.error);
-            return null;
+            Process process = newProcess(cmd);
+            if (process == null) return null;
+
+            StringBuilder output = new StringBuilder();
+            try (BufferedReader reader = new BufferedReader(
+                    new InputStreamReader(process.getInputStream()))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    output.append(line).append("\n");
+                }
+            }
+
+            try (BufferedReader reader = new BufferedReader(
+                    new InputStreamReader(process.getErrorStream()))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    output.append(line).append("\n");
+                }
+            }
+
+            process.waitFor();
+            return output.toString().trim();
         } catch (Throwable t) {
             Log.w(TAG, "executeShell failed", t);
             return null;
         }
     }
 
-    /** Get a system setting value. */
-    static String getSetting(String namespace, String key) {
+    /**
+     * Call Shizuku.newProcess() via reflection (it's package-private in the stock API).
+     */
+    private static Process newProcess(String[] cmd) {
         try {
-            ShizukuPlusAPI.CommandResult result =
-                    ShizukuPlusAPI.executeShell(new String[]{"settings", "get", namespace, key});
-            return result.output;
+            Method m = Shizuku.class.getDeclaredMethod("newProcess",
+                    String[].class, String[].class, String.class);
+            m.setAccessible(true);
+            return (Process) m.invoke(null, cmd, null, null);
         } catch (Throwable t) {
+            Log.w(TAG, "newProcess reflection failed", t);
             return null;
         }
     }
 
+    /** Get a system setting value. */
+    static String getSetting(String namespace, String key) {
+        return executeShell(new String[]{"settings", "get", namespace, key});
+    }
+
     /** Set a system setting value. */
     static boolean setSetting(String namespace, String key, String value) {
-        try {
-            return ShizukuPlusAPI.executeShell(
-                    new String[]{"settings", "put", namespace, key, value}).isSuccess();
-        } catch (Throwable t) {
-            return false;
-        }
+        String result = executeShell(new String[]{"settings", "put", namespace, key, value});
+        return result != null; // no error output = success
     }
 
     /** Get the current state of a tweak (on/off). */
@@ -250,7 +285,6 @@ final class ShizukuManager {
     /** Apply a tweak (set to on value). */
     static boolean enableTweak(Tweak tweak) {
         if (tweak.requiresRoot) {
-            // Use su for root-required tweaks
             String result = executeShell("su -c 'settings put " + tweak.namespace
                     + " " + tweak.settingKey + " " + tweak.onValue + "'");
             return result != null;
@@ -287,11 +321,9 @@ final class ShizukuManager {
         StringBuilder sb = new StringBuilder();
         sb.append("=== Samsung Bootloader Status ===\n");
 
-        // Check OEM unlock setting
         String oemUnlock = getSetting("global", "oem_unlock_enabled");
         sb.append("OEM Unlock Enabled: ").append(oemUnlock != null ? oemUnlock : "unknown").append("\n");
 
-        // Check bootloader state properties (requires root)
         String bootState = executeShell("getprop ro.boot.verifiedbootstate");
         sb.append("Verified Boot State: ").append(bootState != null ? bootState : "unknown").append("\n");
 
@@ -301,17 +333,14 @@ final class ShizukuManager {
         String warrantyBit = executeShell("getprop ro.boot.warranty_bit");
         sb.append("Warranty Bit: ").append(warrantyBit != null ? warrantyBit : "unknown").append("\n");
 
-        // Check device info
         String device = executeShell("getprop ro.product.device");
         String model = executeShell("getprop ro.product.model");
         sb.append("Device: ").append(device != null ? device : "?").append("\n");
         sb.append("Model: ").append(model != null ? model : "?").append("\n");
 
-        // Check if Qualcomm
         String platform = executeShell("getprop ro.board.platform");
         sb.append("Platform: ").append(platform != null ? platform : "?").append("\n");
 
-        // Check Knox status
         String knox = executeShell("getprop ro.config.knox");
         sb.append("Knox: ").append(knox != null ? knox : "unknown").append("\n");
 
@@ -319,27 +348,22 @@ final class ShizukuManager {
     }
 
     /**
-     * Samsung Qualcomm-specific: attempt to enable OEM unlock via
-     * engineering mode service. This uses the Samsung engineering mode
-     * intent which is available on Qualcomm-based Samsung devices.
+     * Samsung Qualcomm-specific: attempt to enable OEM unlock.
      */
     static boolean enableSamsungOemUnlock() {
-        // Method 1: Standard settings put (works with Shizuku)
         boolean standard = setSetting("global", "oem_unlock_enabled", "1");
         if (standard) return true;
 
-        // Method 2: Via root (if available)
         String result = executeShell("su -c 'settings put global oem_unlock_enabled 1'");
         return result != null;
     }
 
     /**
      * Reboot to bootloader/download mode.
-     * Samsung devices use 'reboot download' for download mode.
      */
     static boolean rebootToBootloader() {
         String result = executeShell("reboot bootloader");
-        return result == null; // reboot command returns nothing on success
+        return result == null;
     }
 
     static boolean rebootToDownloadMode() {

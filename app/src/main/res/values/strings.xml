@@ -76,6 +76,8 @@
     <string name="shizuku_connected_plus">Connected (Shizuku+ enhanced API)</string>
     <string name="shizuku_connect">Connect / Request permission</string>
     <string name="shizuku_requesting_permission">Requesting Shizuku permission…</string>
+    <string name="shizuku_permission_granted">Shizuku permission granted</string>
+    <string name="shizuku_permission_denied">Shizuku permission denied</string>
     <string name="tweaks_connect_hint">Connect to Shizuku to enable system tweaks</string>
     <string name="tweaks_section_bootloader">Bootloader</string>
     <string name="tweaks_section_developer">Developer</string>

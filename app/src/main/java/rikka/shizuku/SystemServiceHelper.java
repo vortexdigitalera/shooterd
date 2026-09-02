@@ -40,22 +40,13 @@ public class SystemServiceHelper {
      */
     public static IBinder getSystemService(@NonNull String name) {
         IBinder binder = SYSTEM_SERVICE_CACHE.get(name);
-        // A cached binder can outlive the service it points to (the owning process restarted and
-        // ServiceManager now hands out a new instance, or the process died outright) — a dead
-        // entry would otherwise be returned forever since map lookups never re-invoke getService.
-        if (binder != null && !binder.isBinderAlive()) {
-            SYSTEM_SERVICE_CACHE.remove(name);
-            binder = null;
-        }
         if (binder == null) {
             try {
                 binder = (IBinder) getService.invoke(null, name);
             } catch (IllegalAccessException | InvocationTargetException e) {
                 Log.w("SystemServiceHelper", Log.getStackTraceString(e));
             }
-            if (binder != null) {
-                SYSTEM_SERVICE_CACHE.put(name, binder);
-            }
+            SYSTEM_SERVICE_CACHE.put(name, binder);
         }
         return binder;
     }
@@ -104,7 +95,7 @@ public class SystemServiceHelper {
             TRANSACT_CODE_CACHE.put(key, value);
             return value;
         } catch (ClassNotFoundException | IllegalAccessException e) {
-            android.util.Log.e("SystemServiceHelper", "Failed to get transaction code", e);
+            e.printStackTrace();
         }
         return null;
     }

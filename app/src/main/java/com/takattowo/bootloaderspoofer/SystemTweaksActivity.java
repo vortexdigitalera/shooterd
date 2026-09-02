@@ -1,6 +1,7 @@
 package com.takattowo.bootloaderspoofer;
 
 import android.content.Intent;
+import android.content.pm.PackageManager;
 import android.net.Uri;
 import android.os.Bundle;
 import android.view.LayoutInflater;
@@ -17,8 +18,10 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 
 import java.util.Map;
 
+import rikka.shizuku.Shizuku;
+
 /**
- * System tweaks activity using Shizuku/ShizukuPlus for elevated shell access.
+ * System tweaks activity using Shizuku for elevated shell access.
  * Provides toggles for hidden system settings including OEM unlock,
  * developer options, display settings, and Samsung-specific Qualcomm tweaks.
  */
@@ -28,6 +31,22 @@ public class SystemTweaksActivity extends AppCompatActivity {
     private TextView shizukuStatus;
     private View shizukuConnectRow;
     private View samsungStatusRow;
+
+    private static final int SHIZUKU_REQUEST_CODE = 1001;
+
+    private final Shizuku.OnRequestPermissionResultListener permissionListener =
+            (requestCode, grantResult) -> {
+                if (grantResult == PackageManager.PERMISSION_GRANTED) {
+                    runOnUiThread(() -> {
+                        toast(getString(R.string.shizuku_permission_granted));
+                        updateShizukuStatus();
+                        rebuildTweakRows();
+                    });
+                } else {
+                    runOnUiThread(() ->
+                            toast(getString(R.string.shizuku_permission_denied)));
+                }
+            };
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -47,7 +66,14 @@ public class SystemTweaksActivity extends AppCompatActivity {
         tweaksContainer = findViewById(R.id.tweaks_container);
 
         ShizukuManager.init();
+        Shizuku.addRequestPermissionResultListener(permissionListener);
         updateShizukuStatus();
+    }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        Shizuku.removeRequestPermissionResultListener(permissionListener);
     }
 
     @Override
@@ -60,7 +86,6 @@ public class SystemTweaksActivity extends AppCompatActivity {
     private void updateShizukuStatus() {
         boolean installed = ShizukuManager.isInstalled(this);
         boolean connected = ShizukuManager.isConnected();
-        boolean enhanced = ShizukuManager.isEnhancedApi();
 
         if (!installed) {
             shizukuStatus.setText(R.string.shizuku_not_installed);
@@ -81,9 +106,7 @@ public class SystemTweaksActivity extends AppCompatActivity {
                 toast(getString(R.string.shizuku_requesting_permission));
             });
         } else {
-            String status = enhanced ? getString(R.string.shizuku_connected_plus)
-                    : getString(R.string.shizuku_connected);
-            shizukuStatus.setText(status);
+            shizukuStatus.setText(R.string.shizuku_connected);
             shizukuConnectRow.setVisibility(View.GONE);
         }
     }

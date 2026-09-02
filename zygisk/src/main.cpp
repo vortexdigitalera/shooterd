@@ -18,10 +18,14 @@
 #include <sys/sysmacros.h>
 #include <string>
 #include <cstring>
+#include <cstdarg>
+#include <cstddef>
 #include <fcntl.h>
 #include <unistd.h>
 #include <dlfcn.h>
 #include <android/log.h>
+#include <sys/stat.h>
+#include <time.h>
 #include "zygisk.h"
 
 using zygisk::Api;
@@ -29,9 +33,92 @@ using zygisk::AppSpecializeArgs;
 using zygisk::ServerSpecializeArgs;
 
 static const char *MODULE_TAG = "BootloaderSpoofer-Zygisk";
+static const char *KLOG_PATH = "/dev/kmsg";
+static const char *LOG_FILE = "/data/adb/bootloaderspoofer/zygisk.log";
 
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, MODULE_TAG, __VA_ARGS__)
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, MODULE_TAG, __VA_ARGS__)
+
+// ---------------------------------------------------------------------------
+// Kernel logging support
+//
+// Writes log messages to the kernel log (/dev/kmsg) so they appear in dmesg,
+// and also to a persistent log file. This is useful for debugging the Zygisk
+// module's property hooks and injection lifecycle.
+// ---------------------------------------------------------------------------
+
+static int g_kmsg_fd = -1;
+static int g_log_fd = -1;
+
+static void klog_init() {
+    // Open kernel log (/dev/kmsg)
+    if (g_kmsg_fd < 0) {
+        g_kmsg_fd = open(KLOG_PATH, O_WRONLY | O_APPEND);
+    }
+    // Open persistent log file
+    if (g_log_fd < 0) {
+        // Ensure directory exists
+        mkdir("/data/adb/bootloaderspoofer", 0755);
+        g_log_fd = open(LOG_FILE, O_WRONLY | O_APPEND | O_CREAT, 0644);
+    }
+}
+
+static void klog_write(int level, const char *fmt, ...) {
+    char buf[512];
+    va_list args;
+    va_start(args, fmt);
+
+    // Prefix with timestamp and level
+    const char *level_str;
+    switch (level) {
+        case ANDROID_LOG_ERROR: level_str = "E"; break;
+        case ANDROID_LOG_WARN:   level_str = "W"; break;
+        case ANDROID_LOG_INFO:   level_str = "I"; break;
+        case ANDROID_LOG_DEBUG:  level_str = "D"; break;
+        default:                 level_str = "?"; break;
+    }
+
+    int prefix_len = snprintf(buf, sizeof(buf), "[%s] [%s] ", MODULE_TAG, level_str);
+    if (prefix_len < 0 || (size_t)prefix_len >= sizeof(buf)) {
+        va_end(args);
+        return;
+    }
+
+    int msg_len = vsnprintf(buf + prefix_len, sizeof(buf) - prefix_len - 1, fmt, args);
+    va_end(args);
+
+    if (msg_len < 0) return;
+
+    int total_len = prefix_len + msg_len;
+    if ((size_t)total_len >= sizeof(buf)) total_len = sizeof(buf) - 1;
+    buf[total_len] = '\0';
+
+    // Add newline
+    if (total_len < (int)sizeof(buf) - 1) {
+        buf[total_len] = '\n';
+        buf[total_len + 1] = '\0';
+        total_len++;
+    }
+
+    // Write to kernel log
+    if (g_kmsg_fd >= 0) {
+        write(g_kmsg_fd, buf, total_len);
+    }
+
+    // Write to log file
+    if (g_log_fd >= 0) {
+        write(g_log_fd, buf, total_len);
+    }
+
+    // Also write to Android log
+    __android_log_print(level, MODULE_TAG, "%s", buf + prefix_len);
+}
+
+// Convenience macros for kernel logging
+#define KLOGI(...) klog_write(ANDROID_LOG_INFO, __VA_ARGS__)
+#define KLOGW(...) klog_write(ANDROID_LOG_WARN, __VA_ARGS__)
+#define KLOGE(...) klog_write(ANDROID_LOG_ERROR, __VA_ARGS__)
+#define KLOGD(...) klog_write(ANDROID_LOG_DEBUG, __VA_ARGS__)
 
 // Properties to spoof and their values for locked/unlocked states
 struct PropOverride {
@@ -68,6 +155,9 @@ static void readBootState() {
         if (strncmp(p, "unlocked", 8) == 0) {
             g_bootStateUnlocked = true;
         }
+        KLOGI("readBootState: %s -> unlocked=%d", p, g_bootStateUnlocked);
+    } else {
+        KLOGW("readBootState: config file not found, defaulting to locked");
     }
     g_initialized = true;
 }
@@ -86,6 +176,7 @@ static int hooked_system_property_get(const char *name, char *value) {
             const char *newVal = g_bootStateUnlocked
                 ? PROP_OVERRIDES[i].unlockedValue
                 : PROP_OVERRIDES[i].lockedValue;
+            KLOGD("spoof prop: %s -> %s (was: %s)", name, newVal, value);
             strncpy(value, newVal, PROP_VALUE_MAX - 1);
             value[PROP_VALUE_MAX - 1] = '\0';
             return strlen(value);
@@ -99,6 +190,8 @@ public:
     void onLoad(Api *api, JNIEnv *env) override {
         this->api = api;
         this->env = env;
+        klog_init();
+        KLOGI("Zygisk module loaded (pid=%d)", getpid());
         readBootState();
     }
 
@@ -106,11 +199,13 @@ public:
         // Read the process name
         const char *process = env->GetStringUTFChars(args->nice_name, nullptr);
         if (process == nullptr) return;
+        KLOGD("preAppSpecialize: process=%s uid=%d", process, args->uid);
 
         // Skip if Zygisk mode is off (check config)
         int modeFd = open("/data/adb/bootloaderspoofer/zygisk_mode.txt", O_RDONLY);
         if (modeFd < 0) {
             // No config = Zygisk off, don't hook
+            KLOGD("Zygisk mode off (no config), skipping %s", process);
             env->ReleaseStringUTFChars(args->nice_name, process);
             api->setOption(zygisk::DLCLOSE_MODULE_LIBRARY);
             return;
@@ -121,6 +216,7 @@ public:
 
         // Only hook if mode is "active"
         if (strstr(modeBuf, "active") == nullptr) {
+            KLOGD("Zygisk mode not active (%s), skipping %s", modeBuf, process);
             env->ReleaseStringUTFChars(args->nice_name, process);
             api->setOption(zygisk::DLCLOSE_MODULE_LIBRARY);
             return;
@@ -184,12 +280,16 @@ public:
 
         // Commit the hooks
         if (!api->pltHookCommit()) {
-            LOGE("Failed to commit PLT hooks for __system_property_get");
+            KLOGE("Failed to commit PLT hooks for __system_property_get");
+        } else {
+            KLOGI("PLT hooks committed for %s (libc dev=%lu inode=%lu)",
+                  process, (unsigned long)libc_dev, (unsigned long)libc_inode);
         }
         // Hooks are already registered, nothing more to do
     }
 
     void preServerSpecialize(ServerSpecializeArgs *args) override {
+        KLOGI("preServerSpecialize: skipping system_server (scoped mode)");
         // Don't hook system_server in scoped mode
         api->setOption(zygisk::DLCLOSE_MODULE_LIBRARY);
     }
@@ -212,7 +312,8 @@ REGISTER_ZYGISK_MODULE(BootloaderSpooferModule)
 
 __attribute__((visibility("default")))
 extern "C" void entry(void *start_addr, size_t block_size, const char *path) {
-    LOGI("BootloaderSpoofer injected via NeoZygisk ptrace, path=%s", path ? path : "(null)");
+    klog_init();
+    KLOGI("BootloaderSpoofer injected via NeoZygisk ptrace, path=%s", path ? path : "(null)");
 
     // Read boot state config
     readBootState();
@@ -230,9 +331,13 @@ extern "C" void entry(void *start_addr, size_t block_size, const char *path) {
         if (real_func) {
             // Store the original function pointer
             orig_system_property_get = (int (*)(const char *, char *))real_func;
-            LOGI("found __system_property_get at %p", real_func);
+            KLOGI("found __system_property_get at %p", real_func);
+        } else {
+            KLOGE("dlsym failed to find __system_property_get");
         }
         dlclose(libc_handle);
+    } else {
+        KLOGE("dlopen libc.so failed");
     }
 
     // In a full NeoZygisk implementation, we would hook the JNI methods
@@ -241,5 +346,5 @@ extern "C" void entry(void *start_addr, size_t block_size, const char *path) {
     // For now, the property hook via PLT replacement handles the core
     // bootloader spoofing functionality.
 
-    LOGI("BootloaderSpoofer NeoZygisk entry complete");
+    KLOGI("BootloaderSpoofer NeoZygisk entry complete");
 }

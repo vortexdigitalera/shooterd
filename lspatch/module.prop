@@ -1,0 +1,6 @@
+id=bootloaderspoofer_lspatch
+name=Bootloader Spoofer (LSPatch)
+version=v1.0.0
+versionCode=1
+author=takattowo
+description=Bootloader Spoofer module for LSPatch Manager. Patches target APKs to spoof locked bootloader state on local key attestations. Non-root Xposed via LSPatch.

@@ -3,21 +3,6 @@ package moe.shizuku.server;
 import moe.shizuku.server.IRemoteProcess;
 import moe.shizuku.server.IShizukuApplication;
 import moe.shizuku.server.IShizukuServiceConnection;
-import af.shizuku.server.IVirtualMachineManager;
-import af.shizuku.server.IStorageProxy;
-import af.shizuku.server.IAICorePlus;
-import af.shizuku.server.IAIAutomationBridge;
-import af.shizuku.server.IWindowManagerPlus;
-import af.shizuku.server.IContinuityBridge;
-import af.shizuku.server.IOverlayManagerPlus;
-import af.shizuku.server.INetworkGovernorPlus;
-import af.shizuku.server.IActivityManagerPlus;
-import af.shizuku.server.IStatusBarGovernorPlus;
-import af.shizuku.server.IPackageGovernorPlus;
-import af.shizuku.server.IDisplayTunerPlus;
-import af.shizuku.server.IAppInspector;
-import af.shizuku.server.IPrivilegedDataSource;
-import af.shizuku.server.IBackupRestorePlus;
 
 interface IShizukuService {
 
@@ -60,46 +45,4 @@ interface IShizukuService {
     int getFlagsForUid(int uid, int mask) = 105;
 
     void updateFlagsForUid(int uid, int mask, int value) = 106;
-
-    IVirtualMachineManager getVirtualMachineManager() = 107;
-
-    IStorageProxy getStorageProxy() = 108;
-
-    IAICorePlus getAICorePlus() = 109;
-
-    IWindowManagerPlus getWindowManagerPlus() = 110;
-
-    IContinuityBridge getContinuityBridge() = 111;
-
-    void updatePlusFeatureEnabled(String key, boolean enabled) = 112;
-
-    void setPlusSetting(String key, String value) = 116;
-
-    IOverlayManagerPlus getOverlayManagerPlus() = 113;
-
-    INetworkGovernorPlus getNetworkGovernorPlus() = 114;
-
-    IActivityManagerPlus getActivityManagerPlus() = 115;
-
-    void elevateApp(String packageName) = 117;
-
-    List<String> getRecentLogs() = 118;
-
-    String getPlusSetting(String key) = 119;
-
-    boolean isPlusFeatureEnabled(String key) = 120;
-
-    void registerAIAutomationBridge(in IAIAutomationBridge bridge) = 121;
-
-    IStatusBarGovernorPlus getStatusBarGovernorPlus() = 122;
-
-    IPackageGovernorPlus getPackageGovernorPlus() = 123;
-
-    IDisplayTunerPlus getDisplayTunerPlus() = 124;
-
-    IAppInspector getAppInspector() = 125;
-
-    IPrivilegedDataSource getPrivilegedDataSource() = 126;
-
-    IBackupRestorePlus getBackupRestorePlus() = 127;
  }

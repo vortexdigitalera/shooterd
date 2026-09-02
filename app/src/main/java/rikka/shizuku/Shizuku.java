@@ -35,17 +35,17 @@ import moe.shizuku.server.IShizukuService;
 
 public class Shizuku {
 
-    private static volatile IBinder binder;
-    private static volatile IShizukuService service;
+    private static IBinder binder;
+    private static IShizukuService service;
 
-    private static volatile int serverUid = -1;
-    private static volatile int serverApiVersion = -1;
-    private static volatile int serverPatchVersion = -1;
-    private static volatile String serverContext = null;
-    private static volatile boolean permissionGranted = false;
-    private static volatile boolean shouldShowRequestPermissionRationale = false;
-    private static volatile boolean preV11 = false;
-    private static volatile boolean binderReady = false;
+    private static int serverUid = -1;
+    private static int serverApiVersion = -1;
+    private static int serverPatchVersion = -1;
+    private static String serverContext = null;
+    private static boolean permissionGranted = false;
+    private static boolean shouldShowRequestPermissionRationale = false;
+    private static boolean preV11 = false;
+    private static boolean binderReady = false;
 
     private static final IShizukuApplication SHIZUKU_APPLICATION = new IShizukuApplication.Stub() {
 
@@ -65,16 +65,6 @@ public class Shizuku {
         public void dispatchRequestPermissionResult(int requestCode, Bundle data) {
             boolean allowed = data.getBoolean(REQUEST_PERMISSION_REPLY_ALLOWED, false);
             scheduleRequestPermissionResultListener(requestCode, allowed ? PackageManager.PERMISSION_GRANTED : PackageManager.PERMISSION_DENIED);
-        }
-
-        @Override
-        public void dispatchLog(String appName, String packageName, String action) {
-            scheduleLogListener(appName, packageName, action);
-        }
-
-        @Override
-        public void dispatchSentryEvent(String eventJson) {
-            scheduleSentryEventListener(eventJson);
         }
 
         @Override
@@ -102,7 +92,7 @@ public class Shizuku {
             data.writeStrongBinder(SHIZUKU_APPLICATION.asBinder());
             data.writeInt(1);
             args.writeToParcel(data, 0);
-            result = binder.transact(17 /*IShizukuService.Stub.TRANSACTION_attachApplication*/, data, reply, 0);
+            result = binder.transact(18 /*IShizukuService.Stub.TRANSACTION_attachApplication*/, data, reply, 0);
             reply.readException();
         } finally {
             reply.recycle();
@@ -192,14 +182,6 @@ public class Shizuku {
         void onRequestPermissionResult(int requestCode, int grantResult);
     }
 
-    public interface OnLogListener {
-        void onLog(String appName, String packageName, String action);
-    }
-
-    public interface OnSentryEventListener {
-        void onSentryEvent(String eventJson);
-    }
-
     private static class ListenerHolder<T> {
 
         private final T listener;
@@ -227,8 +209,6 @@ public class Shizuku {
     private static final List<ListenerHolder<OnBinderReceivedListener>> RECEIVED_LISTENERS = new ArrayList<>();
     private static final List<ListenerHolder<OnBinderDeadListener>> DEAD_LISTENERS = new ArrayList<>();
     private static final List<ListenerHolder<OnRequestPermissionResultListener>> PERMISSION_LISTENERS = new ArrayList<>();
-    private static final List<ListenerHolder<OnLogListener>> LOG_LISTENERS = new ArrayList<>();
-    private static final List<ListenerHolder<OnSentryEventListener>> SENTRY_EVENT_LISTENERS = new ArrayList<>();
     private static final Handler MAIN_HANDLER = new Handler(Looper.getMainLooper());
 
     /**
@@ -444,62 +424,6 @@ public class Shizuku {
         }
     }
 
-    public static void addLogListener(@NonNull OnLogListener listener) {
-        synchronized (RECEIVED_LISTENERS) {
-            LOG_LISTENERS.add(new ListenerHolder<>(listener, null));
-        }
-    }
-
-    public static void removeLogListener(@NonNull OnLogListener listener) {
-        synchronized (RECEIVED_LISTENERS) {
-            LOG_LISTENERS.removeIf(holder -> holder.listener == listener);
-        }
-    }
-
-    public static void addSentryEventListener(@NonNull OnSentryEventListener listener) {
-        synchronized (RECEIVED_LISTENERS) {
-            SENTRY_EVENT_LISTENERS.add(new ListenerHolder<>(listener, null));
-        }
-    }
-
-    public static void removeSentryEventListener(@NonNull OnSentryEventListener listener) {
-        synchronized (RECEIVED_LISTENERS) {
-            SENTRY_EVENT_LISTENERS.removeIf(holder -> holder.listener == listener);
-        }
-    }
-
-    private static void scheduleSentryEventListener(String eventJson) {
-        synchronized (RECEIVED_LISTENERS) {
-            for (ListenerHolder<OnSentryEventListener> holder : SENTRY_EVENT_LISTENERS) {
-                if (holder.handler != null) {
-                    holder.handler.post(() -> holder.listener.onSentryEvent(eventJson));
-                } else {
-                    if (Looper.myLooper() == Looper.getMainLooper()) {
-                        holder.listener.onSentryEvent(eventJson);
-                    } else {
-                        MAIN_HANDLER.post(() -> holder.listener.onSentryEvent(eventJson));
-                    }
-                }
-            }
-        }
-    }
-
-    private static void scheduleLogListener(String appName, String packageName, String action) {
-        synchronized (RECEIVED_LISTENERS) {
-            for (ListenerHolder<OnLogListener> holder : LOG_LISTENERS) {
-                if (holder.handler != null) {
-                    holder.handler.post(() -> holder.listener.onLog(appName, packageName, action));
-                } else {
-                    if (Looper.myLooper() == Looper.getMainLooper()) {
-                        holder.listener.onLog(appName, packageName, action);
-                    } else {
-                        MAIN_HANDLER.post(() -> holder.listener.onLog(appName, packageName, action));
-                    }
-                }
-            }
-        }
-    }
-
     @NonNull
     protected static IShizukuService requireService() {
         if (service == null) {
@@ -528,7 +452,6 @@ public class Shizuku {
      * @see #addBinderDeadListener(OnBinderDeadListener)
      */
     public static boolean pingBinder() {
-        IBinder b = binder;
         return binder != null && binder.pingBinder();
     }
 
@@ -565,7 +488,7 @@ public class Shizuku {
      * for complicated requirements.
      * <p>This method is planned to be removed from Shizuku API 14.
      */
-    public static ShizukuRemoteProcess newProcess(@NonNull String[] cmd, @Nullable String[] env, @Nullable String dir) {
+    private static ShizukuRemoteProcess newProcess(@NonNull String[] cmd, @Nullable String[] env, @Nullable String dir) {
         try {
             return new ShizukuRemoteProcess(requireService().newProcess(cmd, env, dir));
         } catch (RemoteException e) {
@@ -1015,56 +938,5 @@ public class Shizuku {
     @RestrictTo(LIBRARY_GROUP_PREFIX)
     public static int getServerPatchVersion() {
         return serverPatchVersion;
-    }
-
-    /**
-     * Check if Shizuku+ Enhanced API is enabled on the server.
-     *
-     * @return True if enabled
-     */
-    public static boolean isCustomApiEnabled() {
-        if (!pingBinder()) return false;
-        Parcel data = Parcel.obtain();
-        Parcel reply = Parcel.obtain();
-        try {
-            data.writeInterfaceToken("moe.shizuku.server.IShizukuService");
-            // 10002 = BINDER_TRANSACTION_isCustomApiEnabled
-            if (binder.transact(10002, data, reply, 0)) {
-                reply.readException();
-                return reply.readInt() != 0;
-            }
-        } catch (RemoteException e) {
-            // Not a Shizuku+ server or transaction failed
-        } finally {
-            reply.recycle();
-            data.recycle();
-        }
-        return false;
-    }
-
-    /**
-     * Internal class to support Dhizuku compatibility via Shizuku server.
-     */
-    public static class Dhizuku {
-        @Nullable
-        public static IBinder getBinder() {
-            if (!pingBinder()) return null;
-            Parcel data = Parcel.obtain();
-            Parcel reply = Parcel.obtain();
-            try {
-                data.writeInterfaceToken("moe.shizuku.server.IShizukuService");
-                // 10003 = BINDER_TRANSACTION_getDhizukuBinder
-                if (binder.transact(10003, data, reply, 0)) {
-                    reply.readException();
-                    return reply.readStrongBinder();
-                }
-            } catch (RemoteException e) {
-                // Not a Shizuku+ server or transaction failed
-            } finally {
-                reply.recycle();
-                data.recycle();
-            }
-            return null;
-        }
     }
 }
